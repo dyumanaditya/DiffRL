@@ -745,7 +745,7 @@ class SHAC:
                 mean_episode_length = 0
 
             print(
-                "iter {:}/{:}, ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, avg rollout {:.1f}, total steps {:}, fps {:.2f}, value loss {:.2f}, grad norm before/after clip {:.2f}/{:.2f}".format(
+                "iter {:}/{:}, ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, avg rollout {:.1f}, total steps {:}, fps {:.2f}, value/actor loss {:.2f}/{:.2f}, grad norm before/after clip {:.2f}/{:.2f}".format(
                     self.iter_count,
                     self.max_epochs,
                     mean_policy_loss,
@@ -755,6 +755,7 @@ class SHAC:
                     self.step_count,
                     fps,
                     self.value_loss,
+                    self.actor_loss,
                     self.grad_norm_before_clip,
                     self.grad_norm_after_clip,
                 )

@@ -6,12 +6,12 @@ config:
   render: ${general.render}
   device: ${general.device}
   num_envs: 1024
-  seed: ${general.seed}
+#  seed: ${general.seed}
   episode_length: 240
   no_grad: ??? # decided based on algorithm
   stochastic_init: True
   MM_caching_frequency: 4
-  early_termination: False
+#  early_termination: False
 
 shac:
   actor_lr: 1e-3
@@ -33,8 +33,9 @@ ppo:
   actor_mlp:
     units: [64, 64]
   max_epochs: 100
-  minibatch_size: 1920
+  minibatch_size: 1024
   save_interval: 100
   save_best_after: 50
   num_actors: 1024
   steps_num: 240
+#  horizon_length: 240

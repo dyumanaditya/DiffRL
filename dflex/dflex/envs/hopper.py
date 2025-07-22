@@ -121,6 +121,7 @@ class HopperEnv(DFlexEnv):
         self.start_joint_q = [0.0, 0.0, 0.0]
 
         start_height = 0.0
+        offset_step = 2.5
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         for i in range(self.num_environments):
@@ -142,9 +143,9 @@ class HopperEnv(DFlexEnv):
                 radians=True,
                 load_stiffness=True,
             )
-
+            env_offset = (0.0, 0.0, i * offset_step)
             self.builder.joint_X_pj[link_start] = df.transform(
-                (0.0, 0.0, 0.0),
+                env_offset,
                 df.quat_from_axis_angle((1.0, 0.0, 0.0), -math.pi * 0.5),
             )
 
