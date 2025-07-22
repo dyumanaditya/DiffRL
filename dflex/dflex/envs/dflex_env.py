@@ -81,7 +81,7 @@ class DFlexEnv:
 
         self.sim_time = 0.0
 
-        self.num_frames = 0  # record the number of frames for rendering
+        self.num_frames = 1  # record the number of frames for rendering
 
         self.num_environments = num_envs
         self.num_agents = 1
@@ -340,15 +340,24 @@ class DFlexEnv:
 
     def render(self, mode="human"):
         if self.visualize:
+            # Advance the simulation time
             self.render_time += self.dt
-            self.renderer.update(self.state, self.render_time)
+
+            # Playback-speed scaling: <1 → slower, >1 → faster.
+            time_scale = getattr(self, "playback_speed", 1.0)
+            if time_scale <= 0:
+                time_scale = 1.0  # guard against invalid values
+            scaled_time = self.render_time / time_scale
+
+            # Update USD renderer with the scaled time-code
+            self.renderer.update(self.state, scaled_time)
 
             render_interval = 1
-            if self.num_frames == render_interval:
-                try:
-                    self.stage.Save()
-                except:
-                    print("USD save error")
+            # if self.num_frames == render_interval:
+            try:
+                self.stage.Save()
+            except Exception as e:
+                print("USD save error:", e)
 
                 self.num_frames -= render_interval
 
