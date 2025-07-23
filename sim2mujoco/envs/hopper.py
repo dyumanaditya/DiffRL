@@ -54,7 +54,6 @@ class HopperMujocoEnv:
         if self.alg == "shac":
             if done.any():
                 obs = self.reset()
-                # done = torch.tensor([False], dtype=torch.bool).view(self.num_envs).to(self.device)
         return obs, reward, done, info
 
     def reset(self, force_reset=False):
