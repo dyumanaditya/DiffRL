@@ -16,6 +16,7 @@ general:
   checkpoint:
   multi_gpu: False # for PPO
   mixed_precision: False # for PPO
+  sim2mujoco: False # sim2sim transfer eval
 
 # env-specific defaults for different algs
 env:

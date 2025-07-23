@@ -1,3 +1,5 @@
+from .hopper import HopperMujocoEnv
+
 try:
     import gymnasium as gym
     from gymnasium import error as gym_error
@@ -23,6 +25,8 @@ MUJOCO_GYM_MAP = {
     "cartpole": "CartPole-v1",
 }
 
+# Removed custom XML loader; we strictly rely on Gymnasium's built-in environments.
+
 
 def make_env(name: str, render: bool = False):
     """Create a Gymnasium MuJoCo environment.
@@ -40,6 +44,7 @@ def make_env(name: str, render: bool = False):
         Instantiated environment.
     """
     name = name.lower()
+
     gym_id = MUJOCO_GYM_MAP.get(name)
     if gym_id is None:
         # Attempt generic fallback (e.g. "Ant-v4" from "Ant")

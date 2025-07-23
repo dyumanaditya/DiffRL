@@ -18,6 +18,15 @@ config:
   height_rew_scale: 1.0
   action_penalty: -1e-1
 
+mujoco:
+  config:
+    # Sim-to-sim transfer to mujoco
+    _target_: sim2mujoco.envs.HopperMujocoEnv
+    render: True
+    num_games: 10
+    num_envs: 1
+    device: ${general.device}
+
 
 shac:
   actor_lr: 2e-3

@@ -19,10 +19,11 @@ try:
 except:
     print_warning("SVG not installed")
 
+# Expose sim2mujoco envs
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # enables ipdb when script crashes
-sys.excepthook = ultratb.FormattedTB(mode="Plain", color_scheme="Neutral", call_pdb=1)
-
-
+# sys.excepthook = ultratb.FormattedTB(mode="Plain", color_scheme="Neutral", call_pdb=1)
 
 
 def register_envs(env_config):
@@ -130,7 +131,62 @@ def train(cfg: DictConfig):
 
     seeding(cfg.general.seed)
 
-    if "_target_" in cfg.alg:
+    # First check if we are doing a sim2mujoco transfer (training or normal play)
+    if cfg.general.sim2mujoco:
+        # Change mode to play and use the sim2mujoco env
+        cfg.env.config.no_grad = True
+
+        # first shuffle around config structure
+        cfg_train = cfg_full["alg"]
+        cfg_train["params"]["general"] = cfg_full["general"]
+        env_name = cfg_train["params"]["config"]["env_name"]
+        cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
+        cfg_train["params"]["general"]["logdir"] = logdir
+
+        # boilerplate to get rl_games working
+        # Set mode to play even if train is true
+        cfg_train["params"]["general"]["play"] = True
+        cfg_train["params"]["general"]["train"] = False
+
+        # Set num_envs and eval games correctly based on mujoco settings
+        num_envs = cfg["env"]["mujoco"]["config"]["num_envs"]
+        cfg["env"]["ppo"]["num_actors"] = num_envs
+        num_games = cfg["env"]["mujoco"]["config"]["num_games"]
+        cfg["env"]["player"]["games_num"] = num_games
+
+        # Now handle different env instantiation
+        if env_name.split("_")[0] == "df":
+            cfg_train["params"]["config"]["env_name"] = "dflex"
+        elif env_name.split("_")[0] == "warp":
+            cfg_train["params"]["config"]["env_name"] = "warp"
+        env_name = cfg_train["params"]["diff_env"]["_target_"]
+        cfg_train["params"]["diff_env"]["name"] = env_name.split(".")[-1]
+
+        # save config
+        if cfg_train["params"]["general"]["train"]:
+            os.makedirs(logdir, exist_ok=True)
+            yaml.dump(cfg_train, open(os.path.join(logdir, "cfg.yaml"), "w"))
+
+        # register envs with the correct number of actors for PPO
+        if cfg.alg.name == "ppo":
+            cfg["env"]["config"]["num_envs"] = cfg["env"]["ppo"]["num_actors"]
+        else:
+            cfg["env"]["config"]["num_envs"] = cfg["env"]["sac"]["num_actors"]
+
+        register_envs(cfg.env.mujoco)
+
+        # add observer to score keys
+        if cfg_train["params"]["config"].get("score_keys"):
+            algo_observer = RLGPUEnvAlgoObserver()
+        else:
+            algo_observer = None
+
+        runner = Runner(algo_observer)
+        runner.load(cfg_train)
+        runner.reset()
+        runner.run(cfg_train["params"]["general"])
+
+    elif "_target_" in cfg.alg:
         cfg.env.config.no_grad = not cfg.general.train
 
         algo = instantiate(cfg.alg, env_config=cfg.env.config, logdir=logdir)
