@@ -7,6 +7,7 @@ import gymnasium as gym
 class HopperMujocoEnv:
     def __init__(self, render=True, num_envs=1, **kwargs):
         # Make the env
+        # Disable termination from angle limits, because we trained without that
         render_mode = 'human' if render else None
         self.env = gym.make('Hopper-v5', render_mode=render_mode, healthy_angle_range=[-np.inf, np.inf])
 
@@ -20,6 +21,7 @@ class HopperMujocoEnv:
 
     def step(self, action):
         # Step the environment with the given action
+        action = torch.clip(action, -1.0, 1.0)
         action = action.flatten().detach().cpu().numpy() * self.action_scale
         # print("Action:", action)
         obs, reward, terminated, truncated, info = self.env.step(action)
