@@ -16,8 +16,11 @@ class HopperMujocoEnv:
         self.num_obs = 11
 
         self.action_scale = 200.0
+        self.episode_length = 1000
 
         self.device = kwargs.get("device", "cuda:0")
+        self.alg = kwargs.get("alg", "shac")
+        print(self.alg)
 
     def step(self, action):
         # Step the environment with the given action
@@ -32,7 +35,13 @@ class HopperMujocoEnv:
         obs = torch.tensor(obs, dtype=torch.float32).view(self.num_envs, self.num_obs).to(self.device)
         obs = self._correct_obs(obs)
         reward = torch.tensor(reward, dtype=torch.float32).to(self.device)
-        done = torch.tensor(done, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
+        if self.alg == "shac":
+            reward = -reward
+            done = torch.tensor([done], dtype=torch.bool).view(self.num_envs).to(self.device)
+        else:
+            done = torch.tensor(done, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
+
+        # print(done)
         termination = torch.tensor(terminated, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
         truncation = torch.tensor(truncated, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
         info = {
@@ -40,6 +49,12 @@ class HopperMujocoEnv:
             "termination": termination,
             "truncation": truncation,
         }
+
+        # Manual reset for shac
+        if self.alg == "shac":
+            if done.any():
+                obs = self.reset()
+                # done = torch.tensor([False], dtype=torch.bool).view(self.num_envs).to(self.device)
         return obs, reward, done, info
 
     def reset(self, force_reset=False):

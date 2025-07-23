@@ -22,6 +22,7 @@ mujoco:
   config:
     # Sim-to-sim transfer to mujoco
     _target_: sim2mujoco.envs.HopperMujocoEnv
+    alg: ${alg.name}
     render: True
     num_games: 10
     num_envs: 1

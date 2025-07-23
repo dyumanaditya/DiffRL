@@ -481,6 +481,7 @@ class SHAC:
             episode_gamma *= self.gamma
             if len(done_env_ids) > 0:
                 for done_env_id in done_env_ids:
+                    # print(episode_loss[done_env_id])
                     print(
                         "loss = {:.2f}, len = {}".format(
                             episode_loss[done_env_id].item(),

@@ -75,6 +75,11 @@ To transfer a PPO policy to Mujoco:
 python train.py alg=ppo env=hopper general.sim2mujoco=true general.checkpoint=/home/dyuman/Documents/ETH/DiffRL/scripts/runs/df_hopper_ppo_22-20-01-13/nn/df_hopper_ppo.pth env.mujoco.config.num_games=100
 ```
 
+To transfer a SHAC policy to Mujoco:
+```bash
+python train.py alg=shac env=hopper general.sim2mujoco=true general.checkpoint=/home/dyuman/Documents/ETH/DiffRL/scripts/outputs/2025-07-23/23-02-07/logs/best_policy.pt env.mujoco.config.num_games=100
+```
+
 ```bash
 conda install conda-forge::glfw 
 ```
