@@ -49,6 +49,7 @@ class HopperEnv(DFlexEnv):
         height_rew_scale=1.0,
         angle_rew_scale=1.0,
         action_penalty=-1e-1,
+        **kwargs
     ):
         num_obs = 11
         num_act = 3
@@ -67,6 +68,7 @@ class HopperEnv(DFlexEnv):
             stochastic_init,
             jacobian,
             device,
+            **kwargs
         )
 
         self.early_termination = early_termination

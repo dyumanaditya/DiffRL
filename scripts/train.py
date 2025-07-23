@@ -154,7 +154,7 @@ def train(cfg: DictConfig):
             num_envs = cfg["env"]["mujoco"]["config"]["num_envs"]
             cfg["env"]["ppo"]["num_actors"] = num_envs
             num_games = cfg["env"]["mujoco"]["config"]["num_games"]
-            cfg["env"]["player"]["games_num"] = num_games
+            cfg_train["params"]["config"]["player"]["games_num"] = num_games
 
             # Now handle different env instantiation
             if env_name.split("_")[0] == "df":
@@ -237,6 +237,7 @@ def train(cfg: DictConfig):
         env_name = cfg_train["params"]["config"]["env_name"]
         cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
         cfg_train["params"]["general"]["logdir"] = logdir
+        cfg_train["params"]["config"]["train_dir"] = logdir
 
         # boilerplate to get rl_games working
         cfg_train["params"]["general"]["play"] = not cfg_train["params"]["general"][

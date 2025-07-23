@@ -27,3 +27,5 @@ good-shit
 **.DS_Store
 
 .idea/*
+
+.sim2mujoco/policies/

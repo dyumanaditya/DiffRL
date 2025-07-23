@@ -62,6 +62,7 @@ class DFlexEnv:
         stochastic_init=False,
         jacobian=False,
         device="cuda:0",
+        **kwargs,
     ):
         self.no_grad = no_grad
         df.config.no_grad = self.no_grad
@@ -100,6 +101,14 @@ class DFlexEnv:
             np.ones(self.num_actions) * -1.0, np.ones(self.num_actions) * 1.0
         )
 
+        # --------------------------------------------------------------
+        # Convenience pre-compute counts for DR helper
+        # These will be re-computed lazily if the model is not yet built.
+        # --------------------------------------------------------------
+        # will be filled lazily once the model is built
+        self._links_per_env = None
+        self._shapes_per_env = None
+
         # allocate buffers
         self.obs_buf: torch.Tensor = torch.zeros(
             (self.num_envs, self.num_observations),
@@ -111,6 +120,24 @@ class DFlexEnv:
         self.progress_buf = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.long, requires_grad=False
         )
+
+        # --------------------------------------------------------------
+        # Set up domain-randomisation parameters
+        # --------------------------------------------------------------
+        # YAML files can supply either
+        #   dr_params: {...}
+        # or (older)  domain_randomization: {...}
+        # We also require a top-level flag `dr: true` to enable it so that
+        # users can keep the dict around but disable sampling with a single
+        # switch.
+
+        if kwargs.get("dr", False):
+            self.dr_params = (
+                kwargs.get("dr_params")
+                or {}
+            )
+        else:
+            self.dr_params = None
 
     @abstractmethod
     def observation_from_state(self, state):
@@ -139,6 +166,119 @@ class DFlexEnv:
     @abstractmethod
     def stochastic_init_func(self, env_ids):
         pass
+
+    def _apply_domain_randomization(self, env_ids):
+        """Randomise physical parameters for the given environments.
+
+        The YAML dictionary passed in `self.dr_params` can contain items of
+        the form
+
+        ```yaml
+        ke_range: [1e3, 1e5]
+        mu_range: [0.5, 1.0]
+        mass_range: [0.8, 1.2]
+        ```
+
+        Supported keys map to internal tensors as follows
+
+        • *_range  → uniform sampling in that range  (low, high)
+        • ke → shape material column 0
+        • kd → shape material column 1
+        • kf → shape material column 2
+        • mu → shape material column 3
+        • mass → body_mass and body_inertia scale
+        """
+
+        if self.dr_params is None or len(env_ids) == 0:
+            return
+
+        # Make sure counts are available (model might be built after __init__)
+        if self._links_per_env is None:
+            self._links_per_env = (
+                self.model.link_count // self.num_envs if self.model.link_count else 0
+            )
+        if self._shapes_per_env is None:
+            self._shapes_per_env = (
+                self.model.shape_count // self.num_envs if self.model.shape_count else 0
+            )
+
+        # Mapping from parameter name → (type, index)
+        # type == "shape_mat" → self.model.shape_materials[:, col]
+        # type == "mass"      → body_mass + inertia scaling
+        _map = {
+            "ke_range": ("shape_mat", 0),
+            "kd_range": ("shape_mat", 1),
+            "kf_range": ("shape_mat", 2),
+            "mu_range": ("shape_mat", 3),
+            # "contact_ke": ("shape_mat", 0),
+            # "contact_kd": ("shape_mat", 1),
+            # "contact_kf": ("shape_mat", 2),
+            # "friction": ("shape_mat", 3),
+            # "mass_range": ("mass", None),
+            # "mass": ("mass", None),
+        }
+
+        with torch.no_grad():
+            for name, val in self.dr_params.items():
+                if name not in _map:
+                    continue
+
+                # Target bodies
+                if name == "bodies":
+                    # Optional filtering to specific bodies (indices local to env)
+                    target_bodies = val.get("bodies", None)
+                    if target_bodies is not None:
+                        target_bodies = torch.tensor(
+                            target_bodies, device=self.device, dtype=torch.long
+                        )
+
+                # Determine low / high bounds
+                if isinstance(val, (list, tuple)) and len(val) == 2:
+                    low, high = val
+                elif isinstance(val, dict):
+                    low, high = val.get("min"), val.get("max")
+                else:
+                    # unsupported spec, skip
+                    continue
+
+                param_type, col = _map[name]
+
+                # Sample one value per environment being reset
+                rnd_body = (
+                    torch.rand(len(env_ids), device=self.device) * (high - low) + low
+                )
+
+                if param_type == "shape_mat" and self._shapes_per_env > 0:
+                    for i, env_id in enumerate(env_ids):
+                        s0 = env_id * self._shapes_per_env
+                        s1 = s0 + self._shapes_per_env
+                        if target_bodies is None:
+                            # apply to all shapes in env
+                            self.model.shape_materials[s0:s1, col] = rnd_body[i]
+                        else:
+                            # Filter shapes whose (link-id relative to env) is in target_bodies
+                            body_ids = self.model.shape_body[s0:s1] - (
+                                    env_id * self._links_per_env
+                            )
+                            mask = (body_ids[..., None] == target_bodies).any(-1)
+                            self.model.shape_materials[s0:s1][mask, col] = rnd_body[i]
+
+                # elif param_type == "mass" and self._links_per_env > 0:
+                #     for i, env_id in enumerate(env_ids):
+                #         l0 = env_id * self._links_per_env
+                #         l1 = l0 + self._links_per_env
+                #         scale = rnd[i]
+                #         self.model.body_mass[l0:l1] *= scale
+                #         self.model.body_inertia[l0:l1] *= scale
+                #         # no need to update other derived quantities – they
+                #         # will be re-computed during stepping
+
+                # Randomize the ground parameters as well
+                rnd_ground = (
+                    torch.rand(len(env_ids), device=self.device) * (high - low) + low
+                )
+                setattr(self.model, f"contact_{name}", rnd_ground)
+
 
     def compute_termination(self, obs, act):
         # Never terminate; needs to be overriden if we need termination
@@ -278,10 +418,15 @@ class DFlexEnv:
             return self.obs_buf
 
         if env_ids is None or force_reset:
-            # reset all environemnts
+            # reset all environments
             env_ids = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
 
         if env_ids is not None:
+            # Domain randomisation (must happen before we overwrite the
+            # state so that the very first observations come from the
+            # new physics parameters)
+            self._apply_domain_randomization(env_ids)
+
             # clone the state to avoid gradient error
             self.state.joint_q = self.state.joint_q.clone()
             self.state.joint_qd = self.state.joint_qd.clone()
