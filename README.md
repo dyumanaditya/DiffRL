@@ -69,6 +69,12 @@ Once you have generated a rendering file you can load it in USD Composer to gene
 python train.py alg=ppo env=hopper env.ppo.num_actors=1 general.render=true general.train=false general.checkpoint=/home/dyuman/Documents/ETH/DiffRL/scripts/runs/df_hopper_ppo_22-20-01-13/nn/df_hopper_ppo.pth
 ```
 
+## Bundling with shac
+To bundle a SHAC policy, you can use the following command:
+```bash
+python train.py alg=shac env=hopper env.config.dr=false env.shac.max_epochs=1000 env.config.bundle=true env.config.num_samples=20 env.config.sigma=10
+```
+
 ## Sim2Mujoco
 To transfer a PPO policy to Mujoco:
 ```bash

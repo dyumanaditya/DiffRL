@@ -2515,13 +2515,13 @@ class SemiImplicitIntegrator:
                 noise_idx = self.bundle_info[2]
                 bundle_len = substeps + 1
 
-                models = [model] + [model.clone() for _ in range(num_samples)]
+                # models = [model] + [model.clone() for _ in range(num_samples)]
                 # models = [model] + [model] *(num_samples)
 
-                bundle_states = [
-                    [state_in.clone() for _ in range(bundle_len)]
-                    for s in range(num_samples)
-                ]
+                # bundle_states = [
+                #     [state_in.clone() for _ in range(bundle_len)]
+                #     for s in range(num_samples)
+                # ]
                 bundle_control = [
                     state_in.joint_act.clone() for _ in range(num_samples)
                 ]
@@ -2557,14 +2557,16 @@ class SemiImplicitIntegrator:
 
                 # Run the simulation for each sample
                 for sample in range(num_samples):
-                    bundle_states[sample][0].joint_act = bundle_controls[sample]
-                    state_in = bundle_states[sample][0]
-                    inputs = [*state_in.flatten(), *models[sample+1].flatten()]
+                    # state_in = bundle_states[sample][0]
+                    state_in = state_in.clone()
+                    state_in.joint_act = bundle_controls[sample]
+                    m = model.clone()
+                    inputs = [*state_in.flatten(), *m.flatten()]
 
                     # run sim as a PyTorch op
                     tensors = SimulateFunc.apply(
                         self,
-                        models[sample+1],
+                        m,
                         state_in,
                         dt,
                         substeps,
@@ -2577,6 +2579,7 @@ class SemiImplicitIntegrator:
                     final_joint_q += g_state_out.joint_q
                     final_joint_qd += g_state_out.joint_qd
                     g_state_out = None  # null reference
+                    torch.cuda.empty_cache()
 
                 # Average the final joint_q and joint_qd
                 final_joint_q /= num_samples
