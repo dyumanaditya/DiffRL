@@ -2460,10 +2460,11 @@ class SemiImplicitIntegrator:
         self.bundle_info = bundle_info
 
         # Create random generator for bundling noise
-        bundle_seed = bundle_info[6]
-        bundle_device = bundle_info[7]
-        self.noise_gen = torch.Generator(device=bundle_device)
-        self.noise_gen.manual_seed(bundle_seed)
+        if bundle_info is not None:
+            bundle_seed = bundle_info[6]
+            bundle_device = bundle_info[7]
+            self.noise_gen = torch.Generator(device=bundle_device)
+            self.noise_gen.manual_seed(bundle_seed)
 
     def forward(
         self,
