@@ -11,6 +11,7 @@
 import math
 import torch
 import numpy as np
+import copy
 
 from typing import Tuple
 from typing import List
@@ -178,6 +179,13 @@ class State:
                 tensors.append(value)
 
         return tensors
+
+    def clone(self):
+        s = State()
+        s.joint_q = torch.clone(self.joint_q)
+        s.joint_qd = torch.clone(self.joint_qd)
+        s.joint_act = torch.clone(self.joint_act) if hasattr(self, 'joint_act') else None
+        return s
 
 
 class Model:
@@ -644,6 +652,75 @@ class Model:
         )
 
         self.contact_count = len(body0)
+
+    def copy(self, clone_variables=True):
+        """
+        Deep-copies a wp.sim.Model:
+          - Clones all wp arrays (and any nested lists/dicts/sets thereof) if clone_variables=True.
+          - Otherwise just reuses the same array objects.
+          - Shallow-copies all non-array fields.
+          - Sets the new model’s requires_grad to the given flag.
+        """
+
+        def _maybe_clone(obj, attr=None):
+            # rg = rg if rg is not None else False
+            # rg = requires_grad
+            # if attr == "shape_body":
+            #     rg = True
+            if hasattr(obj, "shape") and not isinstance(obj, np.ndarray) and len(obj.shape) == 1:
+                # clone_tensors = ["joint_X_p", "joint_X_c", "joint_axis", "joint_target_ke", "shape_transform"]
+                # if attr in clone_tensors:
+                #     return clone(obj, requires_grad=rg) if clone_variables else obj
+                # else:
+                #     return wp.clone(obj, requires_grad=rg) if clone_variables else obj
+                return obj.clone() if clone_variables else obj
+            if hasattr(obj, "shape") and not isinstance(obj, np.ndarray):
+                return obj.clone() if clone_variables else obj
+            if isinstance(obj, np.ndarray):
+                return np.copy(obj) if clone_variables else obj
+            # Recurse into lists
+            if isinstance(obj, list):
+                return [_maybe_clone(o, attr) for o in obj]
+            # Recurse into tuples
+            if isinstance(obj, tuple):
+                return tuple(_maybe_clone(o, attr) for o in obj)
+            # Recurse into dicts
+            if isinstance(obj, dict):
+                return {k: _maybe_clone(v, attr) for k, v in obj.items()}
+            # Recurse into sets
+            if isinstance(obj, set):
+                return {_maybe_clone(o, attr) for o in obj}
+
+            return obj
+
+        # Create empty model and copy metadata
+        m = Model(self.adapter)
+        # m.requires_grad = requires_grad
+        # m.num_envs = model.num_envs
+
+        # Walk through every attribute on the source model
+        for attr, val in self.__dict__.items():
+            setattr(m, attr, _maybe_clone(val, attr))
+
+        return m
+
+    def clone(self) -> "Model":
+        """
+        Return a copy of this Model whose Tensor attributes have been .clone()'d
+        so you can mutate one without affecting the other, while still preserving
+        full gradient flow back to any original leaf Tensors.
+        """
+        # shallow‐copy the Python object (new.__dict__ refs same values)
+        new = copy.copy(self)
+
+        # for every attr that is a torch.Tensor, replace with a .clone()
+        for name, val in self.__dict__.items():
+            if torch.is_tensor(val):
+                # `.clone()` keeps requires_grad and grad_fn, but allocates new storage
+                new_val = val.clone()
+                setattr(new, name, new_val)
+
+        return new
 
 
 class ModelBuilder:

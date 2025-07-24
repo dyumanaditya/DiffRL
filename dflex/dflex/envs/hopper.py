@@ -10,6 +10,7 @@ import os
 import sys
 
 import torch
+from pyglet.window.key import PRINT
 
 from .dflex_env import DFlexEnv
 
@@ -75,6 +76,20 @@ class HopperEnv(DFlexEnv):
         self.contact_ke = contact_ke
         self.contact_kd = contact_kd if contact_kd is not None else contact_ke / 10.0
 
+        # Bundling parameters
+        self.bundle = kwargs.get("bundle", False)
+        if self.bundle:
+            self.bundle_info = (
+                self.bundle,  # enable bundling
+                (("joint_act",), ("joint_q", "joint_qd")),  # what to disturb / what to average
+                [3, 4, 5], None,  # which DOFs inside those tensors to add noise to/average
+                kwargs.get("num_samples"), kwargs.get("sigma"),  # how many Monte-Carlo shots and σ of the noise
+                kwargs.get("bundle_seed", 0),  # seed for the bundle
+                device
+            )
+        else:
+            self.bundle_info = None
+
         self.init_sim()
 
         # other parameters
@@ -94,6 +109,7 @@ class HopperEnv(DFlexEnv):
         self.builder = df.sim.ModelBuilder()
 
         self.dt = 1.0 / 60.0
+        # self.dt = 1.0 / 125.0
         self.sim_substeps = 16
         self.sim_dt = self.dt
 
@@ -173,7 +189,7 @@ class HopperEnv(DFlexEnv):
             (0.0, -9.81, 0.0), dtype=torch.float32, device=self.device
         )
 
-        self.integrator = df.sim.SemiImplicitIntegrator()
+        self.integrator = df.sim.SemiImplicitIntegrator(bundle_info=self.bundle_info)
 
         self.state = self.model.state()
 

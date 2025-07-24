@@ -9,7 +9,12 @@ class HopperMujocoEnv:
         # Make the env
         # Disable termination from angle limits, because we trained without that
         render_mode = 'human' if render else None
-        self.env = gym.make('Hopper-v5', render_mode=render_mode, healthy_angle_range=[-np.inf, np.inf])
+        self.env = gym.make(
+            'Hopper-v5',
+            render_mode=render_mode,
+            healthy_angle_range=[-np.inf, np.inf],
+            # frame_skip=8
+        )
 
         self.num_envs = num_envs
         self.num_actions = 3

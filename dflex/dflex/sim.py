@@ -2295,6 +2295,7 @@ class SimulateFunc(torch.autograd.Function):
         substeps,
         mass_matrix_freq,
         reset_tape,
+        bundle_info,
         *tensors
     ):
         """
@@ -2312,6 +2313,32 @@ class SimulateFunc(torch.autograd.Function):
 
         actuation = state_in.joint_act
 
+        # if bundle_info is not None and bundle_info[0]:
+        #     from dflex.bundling import bundle_states
+        #     # ctx.bundle_states = []
+        #     # ctx.bundle_control = []
+        #     bundle_tensor_names = bundle_info[1]
+        #     num_samples = bundle_info[4]
+        #     sigma = bundle_info[5]
+        #
+        #     # Copy integrators/models for each rollout?
+        #     # ctx.models = [model] + [model.clone() for _ in range(num_samples)]
+        #     # ctx.models = [model] + [model for _ in range(num_samples)]
+        #     ctx.models = [model] * (num_samples+1)
+        #
+        #     pre_idx = 0
+        #     post_idx = substeps
+        #     sim_dt = dt / float(substeps)
+        #
+        #     state_out = bundle_states(
+        #         ctx,
+        #         pre_idx, post_idx,
+        #         state_in, model, integrator,
+        #         mass_matrix_freq, sim_dt,
+        #         num_samples, sigma
+        #     )
+        #
+        # else:
         # simulate
         for i in range(substeps):
             # ensure actuation is set on all substeps
@@ -2330,6 +2357,9 @@ class SimulateFunc(torch.autograd.Function):
             # swap states
             state_in = state_out
 
+        # print("final state")
+        # print(state_out.joint_q)
+        # print(state_out.joint_qd)
         # use global to pass state object back to caller
         global g_state_out
         g_state_out = state_out
@@ -2385,16 +2415,23 @@ class SimulateFunc(torch.autograd.Function):
             else:
                 adj_inputs.append(None)
 
+        # # Display gradients
+        # print("Gradients:")
+        # for i, grad in enumerate(adj_inputs):
+        #     if grad is not None:
+        #         print(f"Input {i}: {grad.shape} - {grad.norm()}")
+        #         print(grad)
+
         # Free the tape if we don't think it would be useful again;
         #   otherwise just zero it so that we don't accumulate gradients
-        if ctx.reset_tape or ctx.num_backward == 11:  # this should be output dim!
+        if ctx.reset_tape: # or ctx.num_backward == 11:  # this should be output dim!
             ctx.tape.reset()
         else:
             ctx.tape.zero()
 
         # filter grads to replace empty tensors / no grad / constant params with None
         # NOTE: Each none below is for each input parameter of forward!
-        return (None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
+        return (None, None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
 
 
 class SemiImplicitIntegrator:
@@ -2419,8 +2456,14 @@ class SemiImplicitIntegrator:
 
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, bundle_info=None):
+        self.bundle_info = bundle_info
+
+        # Create random generator for bundling noise
+        bundle_seed = bundle_info[6]
+        bundle_device = bundle_info[7]
+        self.noise_gen = torch.Generator(device=bundle_device)
+        self.noise_gen.manual_seed(bundle_seed)
 
     def forward(
         self,
@@ -2435,7 +2478,7 @@ class SemiImplicitIntegrator:
 
         This method inserts a node into the PyTorch computational graph with
         references to all model and state tensors such that gradients
-        can be propagrated back through the simulation step.
+        can be propagated back through the simulation step.
 
         Args:
 
@@ -2464,24 +2507,107 @@ class SemiImplicitIntegrator:
             return state_in
 
         else:
-            # get list of inputs and outputs for PyTorch tensor tracking
-            inputs = [*state_in.flatten(), *model.flatten()]
-
-            # run sim as a PyTorch op
-            tensors = SimulateFunc.apply(
-                self,
-                model,
-                state_in,
-                dt,
-                substeps,
-                mass_matrix_freq,
-                reset_tape,
-                *inputs
-            )
-
+            # Check if we bundle or not
             global g_state_out
-            state_out = g_state_out
-            g_state_out = None  # null reference
+            if self.bundle_info is not None and self.bundle_info[0]:
+                num_samples = self.bundle_info[4]
+                sigma = self.bundle_info[5]
+                noise_idx = self.bundle_info[2]
+                bundle_len = substeps + 1
+
+                models = [model] + [model.clone() for _ in range(num_samples)]
+                # models = [model] + [model] *(num_samples)
+
+                bundle_states = [
+                    [state_in.clone() for _ in range(bundle_len)]
+                    for s in range(num_samples)
+                ]
+                bundle_control = [
+                    state_in.joint_act.clone() for _ in range(num_samples)
+                ]
+
+                bundle_controls = torch.stack(bundle_control, dim=0).to(dtype=torch.float32, device=model.adapter)
+                # print("Before noise:")
+                # print(bundle_controls)
+
+                # Add gaussian noise to the controls (without grad?)
+                if noise_idx is not None:
+                    idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
+                else:
+                    idx = torch.arange(
+                        bundle_controls.shape[1], device=bundle_controls.device
+                    )
+                with torch.no_grad():
+                    noise = torch.randn(
+                        num_samples, idx.numel(),
+                        dtype=bundle_controls.dtype,
+                        device=bundle_controls.device,
+                        generator=self.noise_gen,  # works
+                    ) * sigma
+
+                bundle_controls[:, idx] += noise
+                # print("After noise:")
+                # print(bundle_controls)
+                # print()
+
+                # Accumulators for joint_q and joint_qd
+                state_out = model.state()
+                final_joint_q = torch.zeros_like(state_out.joint_q)
+                final_joint_qd = torch.zeros_like(state_out.joint_qd)
+
+                # Run the simulation for each sample
+                for sample in range(num_samples):
+                    bundle_states[sample][0].joint_act = bundle_controls[sample]
+                    state_in = bundle_states[sample][0]
+                    inputs = [*state_in.flatten(), *models[sample+1].flatten()]
+
+                    # run sim as a PyTorch op
+                    tensors = SimulateFunc.apply(
+                        self,
+                        models[sample+1],
+                        state_in,
+                        dt,
+                        substeps,
+                        mass_matrix_freq,
+                        reset_tape,
+                        self.bundle_info,
+                        *inputs
+                    )
+
+                    final_joint_q += g_state_out.joint_q
+                    final_joint_qd += g_state_out.joint_qd
+                    g_state_out = None  # null reference
+
+                # Average the final joint_q and joint_qd
+                final_joint_q /= num_samples
+                final_joint_qd /= num_samples
+                # Set the final state
+                state_out.joint_q = final_joint_q
+                state_out.joint_qd = final_joint_qd
+
+            else:
+                # get list of inputs and outputs for PyTorch tensor tracking
+                inputs = [*state_in.flatten(), *model.flatten()]
+
+                # run sim as a PyTorch op
+                tensors = SimulateFunc.apply(
+                    self,
+                    model,
+                    state_in,
+                    dt,
+                    substeps,
+                    mass_matrix_freq,
+                    reset_tape,
+                    self.bundle_info,
+                    *inputs
+                )
+
+                # global g_state_out
+                state_out = g_state_out
+                g_state_out = None  # null reference
+
+            # print("state_out joint_q", state_out.joint_q)
+            # print("state_out joint_qd", state_out.joint_qd)
 
             return state_out
 
