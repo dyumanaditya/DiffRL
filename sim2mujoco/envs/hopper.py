@@ -14,6 +14,11 @@ class HopperMujocoEnv:
             render_mode=render_mode,
             healthy_angle_range=[-np.inf, np.inf],
             # frame_skip=8
+            exclude_current_positions_from_observation=False
+        )
+
+        self.env.observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(11,), dtype=np.float64
         )
 
         self.num_envs = num_envs
@@ -22,6 +27,7 @@ class HopperMujocoEnv:
 
         self.action_scale = 200.0
         self.episode_length = 1000
+        self.distance_travelled = []
 
         self.device = kwargs.get("device", "cuda:0")
         self.alg = kwargs.get("alg", "shac")
@@ -35,10 +41,8 @@ class HopperMujocoEnv:
         obs, reward, terminated, truncated, info = self.env.step(action)
         done = terminated or truncated
 
-        # print(obs, reward, terminated, truncated, info)
+        obs = torch.tensor(obs, dtype=torch.float32).view(self.num_envs, -1).to(self.device)
 
-        obs = torch.tensor(obs, dtype=torch.float32).view(self.num_envs, self.num_obs).to(self.device)
-        obs = self._correct_obs(obs)
         reward = torch.tensor(reward, dtype=torch.float32).to(self.device)
         reward = -reward
         if self.alg == "shac":
@@ -46,7 +50,12 @@ class HopperMujocoEnv:
         else:
             done = torch.tensor(done, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
 
+        # Distance travelled
+        if done.any():
+            self.distance_travelled.append(obs[:, 0].item())
+
         # print(done)
+        obs = self._correct_obs(obs)
         termination = torch.tensor(terminated, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
         truncation = torch.tensor(truncated, dtype=torch.bool).view(self.num_envs, 1).to(self.device)
         info = {
@@ -62,13 +71,16 @@ class HopperMujocoEnv:
         return obs, reward, done, info
 
     def reset(self, force_reset=False):
+        dt = torch.tensor(self.distance_travelled)
+        print("Average Distance Travelled: ", dt.mean().item())
         # Reset the environment
         obs, info = self.env.reset()
-        obs = torch.tensor(obs, dtype=torch.float32).view(self.num_envs, self.num_obs).to(self.device)
+        obs = torch.tensor(obs, dtype=torch.float32).view(self.num_envs, -1).to(self.device)
         obs = self._correct_obs(obs)
         return obs
 
     def _correct_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        obs = obs[:, 1:]
         obs[:, 0] = obs[:, 0] - 1.25
         return obs
 

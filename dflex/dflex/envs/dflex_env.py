@@ -133,8 +133,7 @@ class DFlexEnv:
 
         if kwargs.get("dr", False):
             self.dr_params = (
-                kwargs.get("dr_params")
-                or {}
+                kwargs.get("domain_randomization")
             )
         else:
             self.dr_params = None
@@ -192,6 +191,9 @@ class DFlexEnv:
         if self.dr_params is None or len(env_ids) == 0:
             return
 
+        # print("Applying domain randomization for envs:", env_ids)
+        # print(self.dr_params)
+
         # Make sure counts are available (model might be built after __init__)
         if self._links_per_env is None:
             self._links_per_env = (
@@ -219,26 +221,30 @@ class DFlexEnv:
         }
 
         with torch.no_grad():
+
+            # Target bodies to add DR to
+            if "bodies" in self.dr_params:
+                target_bodies = self.dr_params["bodies"]
+
+                if target_bodies is not None and len(target_bodies) > 0:
+                    target_bodies = torch.tensor(
+                        target_bodies, device=self.device, dtype=torch.long
+                    )
+                else:
+                    target_bodies = None
+
             for name, val in self.dr_params.items():
                 if name not in _map:
                     continue
 
-                # Target bodies
-                if name == "bodies":
-                    # Optional filtering to specific bodies (indices local to env)
-                    target_bodies = val.get("bodies", None)
-                    if target_bodies is not None:
-                        target_bodies = torch.tensor(
-                            target_bodies, device=self.device, dtype=torch.long
-                        )
-
                 # Determine low / high bounds
+                val = list(val)
                 if isinstance(val, (list, tuple)) and len(val) == 2:
                     low, high = val
                 elif isinstance(val, dict):
                     low, high = val.get("min"), val.get("max")
                 else:
-                    # unsupported spec, skip
+                    # unsupported spec, skip (for bodies)
                     continue
 
                 param_type, col = _map[name]
@@ -278,7 +284,6 @@ class DFlexEnv:
                     torch.rand(len(env_ids), device=self.device) * (high - low) + low
                 )
                 setattr(self.model, f"contact_{name}", rnd_ground)
-
 
     def compute_termination(self, obs, act):
         # Never terminate; needs to be overriden if we need termination

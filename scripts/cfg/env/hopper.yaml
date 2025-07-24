@@ -27,15 +27,19 @@ config:
   # Domain randomization
   dr: False
   domain_randomization:
-    bodies: [3]  # Randomize the foot and the ground
+    bodies: [5]  # Randomize the foot and the ground (foot is body 5 in dflex)
     # Nominal ke=2e4
-    ke_range: [1e3, 1e5]
+    # ke_range: [1e3, 1e5]
+    ke_range: [8e3, 5e4]
     # Nominal kd=2e3
-    kd_range: [1e2, 1e4]
+    # kd_range: [1e2, 1e4]
+    kd_range: [1e3, 3e3]
     # Nominal kf=1e3
-    kf_range: [1e2, 1e4]
+    # kf_range: [1e2, 1e4]
+    kf_range: [8e2, 3e3]
     # Nominal mu=0.9
-    mu_range: [0.5, 1.0]
+    # mu_range: [0.5, 1.0]
+    mu_range: [0.7, 1.0]
 
 mujoco:
   config:

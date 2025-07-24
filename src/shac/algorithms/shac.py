@@ -8,6 +8,7 @@
 import sys, os
 
 from torch.nn.utils.clip_grad import clip_grad_norm_
+from torch.utils.checkpoint import checkpoint
 
 project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_dir)
@@ -271,6 +272,12 @@ class SHAC:
 
             # act in environment
             actions = self.actor(obs, deterministic=deterministic)
+            # with torch.cuda.amp.autocast():  # ← keep if you use AMP
+            #     actions = checkpoint(
+            #         lambda x: self.actor(x, deterministic=deterministic),
+            #         obs,
+            #         use_reentrant=False,  # PyTorch ≥ 1.13
+            #     )
             obs, rew, done, info = self.env.step(torch.tanh(actions))
             term = info["termination"]
             trunc = info["truncation"]
@@ -409,6 +416,8 @@ class SHAC:
                         self.episode_discounted_loss[id] = 0.0
                         self.episode_length[id] = 0
                         self.episode_gamma[id] = 1.0
+
+            torch.cuda.empty_cache()
 
         self.horizon_length_meter.update(rollout_len)
 
