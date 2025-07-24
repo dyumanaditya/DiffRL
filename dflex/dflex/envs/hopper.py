@@ -10,7 +10,6 @@ import os
 import sys
 
 import torch
-from pyglet.window.key import PRINT
 
 from .dflex_env import DFlexEnv
 
