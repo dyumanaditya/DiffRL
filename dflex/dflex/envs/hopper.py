@@ -187,6 +187,7 @@ class HopperEnv(DFlexEnv):
         self.model.gravity = torch.tensor(
             (0.0, -9.81, 0.0), dtype=torch.float32, device=self.device
         )
+        self._set_domain_randomization()
 
         self.integrator = df.sim.SemiImplicitIntegrator(bundle_info=self.bundle_info)
 

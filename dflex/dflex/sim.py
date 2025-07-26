@@ -2582,6 +2582,9 @@ class SemiImplicitIntegrator:
 
                         m = model_sub.clone()  # simulate only the sub-model
 
+                        # Randomize contact params for bundle
+                        m.randomize_contact_params()
+
                         inputs = [*s_in.flatten(), *m.flatten()]
 
                         tensors = SimulateFunc.apply(

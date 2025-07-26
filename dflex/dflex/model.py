@@ -1203,6 +1203,7 @@ class Model:
         # sub.joint_q_start = self.joint_q_start
         # sub.joint_qd_start = self.joint_qd_start
         sub.gravity = self.gravity
+        sub.contact_randomization = getattr(self, "contact_randomization", None)
 
         # sub.particle_q = self.particle_q
         # sub.particle_qd = self.particle_qd
@@ -1330,9 +1331,85 @@ class Model:
         # sub.contact_dist = self.contact_dist
         # sub.contact_material = self.contact_material
 
-
-
         return sub
+
+    def set_contact_randomization_params(self, ke_range, kd_range, kf_range, mu_range, target_bodies):
+        self.contact_randomization = {
+            "ke_range": ke_range,
+            "kd_range": kd_range,
+            "kf_range": kf_range,
+            "mu_range": mu_range,
+            "target_bodies": target_bodies
+        }
+
+    def randomize_contact_params(self) -> None:
+        if getattr(self, "contact_randomization", None) is None:
+            return
+
+        ke_low, ke_high = self.contact_randomization["ke_range"]
+        kd_low, kd_high = self.contact_randomization["kd_range"]
+        kf_low, kf_high = self.contact_randomization["kf_range"]
+        mu_low, mu_high = self.contact_randomization["mu_range"]
+        dr_target_shape = self.contact_randomization["target_bodies"]
+
+        dev = self.adapter  # CUDA / CPU device handle
+        E = int(self.articulation_count)  # number of environments
+
+        shapes_per_env = self.shape_count // E
+
+        links_per_env = (
+            self.link_count // E if self.link_count else 0
+        )
+
+        if dr_target_shape is not None and len(dr_target_shape):
+            dr_target_shape = torch.as_tensor(dr_target_shape, device=dev, dtype=torch.long)
+        else:
+            dr_target_shape = None  # means “all shapes”
+
+        # -------- helper --------------------------------------------------
+        def _rand_vec(low, high):
+            return torch.rand(E, device=dev) * (high - low) + low
+
+        def _rand_scalar(low, high):  # one scalar
+            return (torch.rand(1, device=dev) * (high - low) + low).item()
+
+        ke = _rand_vec(ke_low, ke_high)
+        kd = _rand_vec(kd_low, kd_high)
+        kf = _rand_vec(kf_low, kf_high)
+        mu = _rand_vec(mu_low, mu_high)
+
+        ground_ke = _rand_scalar(ke_low, ke_high)
+        ground_kd = _rand_scalar(kd_low, kd_high)
+        ground_kf = _rand_scalar(kf_low, kf_high)
+        ground_mu = _rand_scalar(mu_low, mu_high)
+
+        # -------- write per‑shape materials ------------------------------
+        with torch.no_grad():
+            for e in range(E):
+                s0 = e * shapes_per_env
+                s1 = s0 + shapes_per_env
+                mat = self.shape_materials[s0:s1]
+
+                if dr_target_shape is None:
+                    mat[:, 0] = ke[e]
+                    mat[:, 1] = kd[e]
+                    mat[:, 2] = kf[e]
+                    mat[:, 3] = mu[e]
+                else:
+                    # randomise only shapes whose body id is in target_bodies
+                    body_ids = self.shape_body[s0:s1] - e * links_per_env
+                    mask = (body_ids[..., None] == dr_target_shape).any(-1)
+
+                    mat[mask, 0] = ke[e]
+                    mat[mask, 1] = kd[e]
+                    mat[mask, 2] = kf[e]
+                    mat[mask, 3] = mu[e]
+
+            # -------- update ground / global contact tensors -------------
+            self.contact_ke = ground_ke
+            self.contact_kd = ground_kd
+            self.contact_kf = ground_kf
+            self.contact_mu = ground_mu
 
 
 class ModelBuilder:
