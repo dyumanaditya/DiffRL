@@ -2272,6 +2272,7 @@ def eval_rigid_integrate(
 
 
 g_state_out = None
+envs_in_contact = None
 
 
 # define PyTorch autograd op to wrap simulate func
@@ -2296,6 +2297,8 @@ class SimulateFunc(torch.autograd.Function):
         mass_matrix_freq,
         reset_tape,
         bundle_info,
+        num_envs,
+        link_count,
         *tensors
     ):
         """
@@ -2313,32 +2316,11 @@ class SimulateFunc(torch.autograd.Function):
 
         actuation = state_in.joint_act
 
-        # if bundle_info is not None and bundle_info[0]:
-        #     from dflex.bundling import bundle_states
-        #     # ctx.bundle_states = []
-        #     # ctx.bundle_control = []
-        #     bundle_tensor_names = bundle_info[1]
-        #     num_samples = bundle_info[4]
-        #     sigma = bundle_info[5]
-        #
-        #     # Copy integrators/models for each rollout?
-        #     # ctx.models = [model] + [model.clone() for _ in range(num_samples)]
-        #     # ctx.models = [model] + [model for _ in range(num_samples)]
-        #     ctx.models = [model] * (num_samples+1)
-        #
-        #     pre_idx = 0
-        #     post_idx = substeps
-        #     sim_dt = dt / float(substeps)
-        #
-        #     state_out = bundle_states(
-        #         ctx,
-        #         pre_idx, post_idx,
-        #         state_in, model, integrator,
-        #         mass_matrix_freq, sim_dt,
-        #         num_samples, sigma
-        #     )
-        #
-        # else:
+        # Collect contact data to determine which links were in contact with the ground
+        # TODO: Generalize. For hopper, link 5 is foot
+        link = 5
+        links_in_contact = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
+
         # simulate
         for i in range(substeps):
             # ensure actuation is set on all substeps
@@ -2354,8 +2336,15 @@ class SimulateFunc(torch.autograd.Function):
                 update_mass_matrix=((i % mass_matrix_freq) == 0),
             )
 
+            # Add to links that are in contact with something
+            contact_count = state_out.contact_count.view(num_envs, link_count)
+            links_in_contact += contact_count[:, link] > 0
+
             # swap states
             state_in = state_out
+
+        global envs_in_contact
+        envs_in_contact = torch.nonzero(links_in_contact).squeeze(1)
 
         # print("final state")
         # print(state_out.joint_q)
@@ -2431,7 +2420,7 @@ class SimulateFunc(torch.autograd.Function):
 
         # filter grads to replace empty tensors / no grad / constant params with None
         # NOTE: Each none below is for each input parameter of forward!
-        return (None, None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
+        return (None, None, None, None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
 
 
 class SemiImplicitIntegrator:
@@ -2508,110 +2497,137 @@ class SemiImplicitIntegrator:
             return state_in
 
         else:
-            # Check if we bundle or not
             global g_state_out
-            if self.bundle_info is not None and self.bundle_info[0]:
-                num_samples = self.bundle_info[4]
-                sigma = self.bundle_info[5]
-                noise_idx = self.bundle_info[2]
-                bundle_len = substeps + 1
+            global envs_in_contact
 
-                # models = [model] + [model.clone() for _ in range(num_samples)]
-                # models = [model] + [model] *(num_samples)
+            # get list of inputs and outputs for PyTorch tensor tracking
+            inputs = [*state_in.flatten(), *model.flatten()]
 
-                # bundle_states = [
-                #     [state_in.clone() for _ in range(bundle_len)]
-                #     for s in range(num_samples)
-                # ]
-                bundle_control = [
-                    state_in.joint_act.clone() for _ in range(num_samples)
-                ]
+            # Number of envs and links per env
+            num_envs = model.articulation_count
+            link_count = model.link_count // num_envs
 
-                bundle_controls = torch.stack(bundle_control, dim=0).to(dtype=torch.float32, device=model.adapter)
-                # print("Before noise:")
-                # print(bundle_controls)
+            # Store state_in before it is modified in the autograd function
+            state_in_clone = state_in.clone()
+            model_in_clone = model.clone()
 
-                # Add gaussian noise to the controls (without grad?)
-                if noise_idx is not None:
-                    idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
-                else:
-                    idx = torch.arange(
-                        bundle_controls.shape[1], device=bundle_controls.device
-                    )
-                with torch.no_grad():
-                    noise = torch.randn(
-                        num_samples, idx.numel(),
-                        dtype=bundle_controls.dtype,
-                        device=bundle_controls.device,
-                        generator=self.noise_gen,  # works
-                    ) * sigma
+            # run sim as a PyTorch op
+            tensors = SimulateFunc.apply(
+                self,
+                model,
+                state_in,
+                dt,
+                substeps,
+                mass_matrix_freq,
+                reset_tape,
+                self.bundle_info,
+                num_envs,
+                link_count,
+                *inputs
+            )
 
-                bundle_controls[:, idx] += noise
-                # print("After noise:")
-                # print(bundle_controls)
-                # print()
+            state_out = g_state_out
+            g_state_out = None
 
-                # Accumulators for joint_q and joint_qd
-                state_out = model.state()
-                final_joint_q = torch.zeros_like(state_out.joint_q)
-                final_joint_qd = torch.zeros_like(state_out.joint_qd)
+            # Check if any envs are in contact with the ground and bundle those for the substeps rollout
+            env_ids_in_contact = envs_in_contact.clone()
+            if env_ids_in_contact.numel() > 0:
+                # Run forward simulation for the sub-model
+                if self.bundle_info is not None and self.bundle_info[0]:
+                    num_samples = self.bundle_info[4]
+                    sigma = self.bundle_info[5]
+                    noise_idx = self.bundle_info[2]
+                    bundle_len = substeps + 1
 
-                # Run the simulation for each sample
-                for sample in range(num_samples):
-                    # state_in = bundle_states[sample][0]
-                    state_in = state_in.clone()
-                    state_in.joint_act = bundle_controls[sample]
-                    m = model.clone()
-                    inputs = [*state_in.flatten(), *m.flatten()]
+                    # Select sub model and sub-states for envs in contact
+                    model_sub = model_in_clone.select_envs(env_ids_in_contact)
+                    # model_sub = model_in_clone
+                    state_in_sub = state_in_clone.select_envs(num_envs, env_ids_in_contact)
+                    model_sub.collide(state_in_sub)
 
-                    # run sim as a PyTorch op
-                    tensors = SimulateFunc.apply(
-                        self,
-                        m,
-                        state_in,
-                        dt,
-                        substeps,
-                        mass_matrix_freq,
-                        reset_tape,
-                        self.bundle_info,
-                        *inputs
-                    )
+                    # Accumulators for joint_q and joint_qd
+                    final_joint_q_sub = torch.zeros_like(state_in_sub.joint_q)
+                    final_joint_qd_sub = torch.zeros_like(state_in_sub.joint_qd)
 
-                    final_joint_q += g_state_out.joint_q
-                    final_joint_qd += g_state_out.joint_qd
-                    g_state_out = None  # null reference
-                    torch.cuda.empty_cache()
+                    bundle_control = [
+                        state_in_sub.joint_act.clone() for _ in range(num_samples)
+                    ]
+                    bundle_controls = torch.stack(bundle_control, dim=0).to(dtype=torch.float32, device=model.adapter)
 
-                # Average the final joint_q and joint_qd
-                final_joint_q /= num_samples
-                final_joint_qd /= num_samples
-                # Set the final state
-                state_out.joint_q = final_joint_q
-                state_out.joint_qd = final_joint_qd
+                    # Add gaussian noise to the controls
+                    if noise_idx is not None:
+                        idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
+                    else:
+                        idx = torch.arange(
+                            bundle_controls.shape[1], device=bundle_controls.device
+                        )
+                    with torch.no_grad():
+                        noise = torch.randn(
+                            num_samples, idx.numel(),
+                            dtype=bundle_controls.dtype,
+                            device=bundle_controls.device,
+                            generator=self.noise_gen,  # works
+                        ) * sigma
 
-            else:
-                # get list of inputs and outputs for PyTorch tensor tracking
-                inputs = [*state_in.flatten(), *model.flatten()]
+                    bundle_controls[:, idx] += noise
 
-                # run sim as a PyTorch op
-                tensors = SimulateFunc.apply(
-                    self,
-                    model,
-                    state_in,
-                    dt,
-                    substeps,
-                    mass_matrix_freq,
-                    reset_tape,
-                    self.bundle_info,
-                    *inputs
-                )
+                    # number of envs and links for the *subset*
+                    num_envs_sub = len(env_ids_in_contact)
+                    link_count_sub = model_sub.link_count // num_envs_sub if num_envs_sub > 0 else 0
 
-                # global g_state_out
-                state_out = g_state_out
-                g_state_out = None  # null reference
+                    for sample in range(num_samples):
+                        # clone state to avoid inplace accumulation across samples
+                        s_in = state_in_sub.clone()
+                        s_in.joint_act = bundle_controls[sample]
+
+                        m = model_sub.clone()  # simulate only the sub-model
+
+                        inputs = [*s_in.flatten(), *m.flatten()]
+
+                        tensors = SimulateFunc.apply(
+                            self,
+                            m,
+                            s_in,
+                            dt,
+                            substeps,
+                            mass_matrix_freq,
+                            reset_tape,
+                            self.bundle_info,
+                            num_envs_sub,
+                            link_count_sub,
+                            *inputs
+                        )
+
+                        final_joint_q_sub += g_state_out.joint_q
+                        final_joint_qd_sub += g_state_out.joint_qd
+                        g_state_out = None  # clear for next sample
+                        torch.cuda.empty_cache()
+
+                    # Average the final sub joint_q and joint_qd
+                    final_joint_q_sub /= num_samples
+                    final_joint_qd_sub /= num_samples
+
+                    # Replace the envs in contact with new bundled states
+                    joint_q = state_out.joint_q.view(num_envs, -1).clone()
+                    joint_qd = state_out.joint_qd.view(num_envs, -1).clone()
+
+                    final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
+                    final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
+
+                    joint_q[env_ids_in_contact] = final_joint_q_sub
+                    joint_qd[env_ids_in_contact] = final_joint_qd_sub
+
+                    # Flatten back to original shape
+                    state_out.joint_q = joint_q.view(-1)
+                    state_out.joint_qd = joint_qd.view(-1)
+
+            # # global g_state_out
+            # state_out = g_state_out
+            # g_state_out = None  # null reference
 
             # print("state_out joint_q", state_out.joint_q)
             # print("state_out joint_qd", state_out.joint_qd)
+            # print()
 
             return state_out
 

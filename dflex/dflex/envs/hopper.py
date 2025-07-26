@@ -53,7 +53,7 @@ class HopperEnv(DFlexEnv):
     ):
         num_obs = 11
         num_act = 3
-        self.playback_speed = 0.05
+        self.playback_speed = 0.005
 
         super(HopperEnv, self).__init__(
             num_envs,
