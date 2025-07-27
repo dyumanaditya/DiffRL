@@ -1385,31 +1385,41 @@ class Model:
 
         # -------- write per‑shape materials ------------------------------
         with torch.no_grad():
-            for e in range(E):
-                s0 = e * shapes_per_env
-                s1 = s0 + shapes_per_env
-                mat = self.shape_materials[s0:s1]
+            # view into storage: (E, Senv, 4)
+            mat = self.shape_materials.view(E, shapes_per_env, 4)
 
-                if dr_target_shape is None:
-                    mat[:, 0] = ke[e]
-                    mat[:, 1] = kd[e]
-                    mat[:, 2] = kf[e]
-                    mat[:, 3] = mu[e]
-                else:
-                    # randomise only shapes whose body id is in target_bodies
-                    body_ids = self.shape_body[s0:s1] - e * links_per_env
-                    mask = (body_ids[..., None] == dr_target_shape).any(-1)
+            # (E, 1, 4) → broadcast along shapes_per_env
+            param = torch.stack([ke, kd, kf, mu], dim=-1)[:, None, :]
 
-                    mat[mask, 0] = ke[e]
-                    mat[mask, 1] = kd[e]
-                    mat[mask, 2] = kf[e]
-                    mat[mask, 3] = mu[e]
+            if dr_target_shape is None:
+                # update *all* shapes: broadcast does the work
+                mat.copy_(param.expand(-1, shapes_per_env, -1))
+            else:
+                # build mask of shapes whose *local* body‑id is in target_bodies
+                local_body_ids = (self.shape_body
+                                  .view(E, shapes_per_env)  # (E,Senv)
+                                  - torch.arange(E, device=dev)[:, None] * links_per_env)
+
+                mask = (local_body_ids[..., None] == dr_target_shape).any(-1)  # (E,Senv)
+
+                # same shape as mat — boolean advanced indexing keeps mapping
+                mat[mask] = param.expand(-1, shapes_per_env, -1)[mask]
 
             # -------- update ground / global contact tensors -------------
             self.contact_ke = ground_ke
             self.contact_kd = ground_kd
             self.contact_kf = ground_kf
             self.contact_mu = ground_mu
+
+        # print("ground contact")
+        # print(self.contact_ke)
+        # print(self.contact_kd)
+        # print(self.contact_kf)
+        # print(self.contact_mu)
+        #
+        # print("materials")
+        # print(self.shape_materials)
+        # print()
 
 
 class ModelBuilder:
