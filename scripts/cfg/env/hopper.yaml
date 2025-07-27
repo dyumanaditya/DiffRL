@@ -24,6 +24,12 @@ config:
   sigma: 10.0
   bundle_seed: 0
 
+  contact:
+    ke: 2e4  # Nominal stiffness for elastic contact
+    kd: 2e3  # Nominal damping for elastic contact
+    kf: 1e3  # Nominal friction for elastic contact
+    mu: 0.9  # Nominal friction coefficient for elastic contact
+
   # Domain randomization
   dr: False
   domain_randomization:

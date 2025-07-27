@@ -2511,6 +2511,9 @@ class SemiImplicitIntegrator:
             state_in_clone = state_in.clone()
             model_in_clone = model.clone()
 
+            # Randomize for each env
+            # model.randomize_contact_params()
+
             # run sim as a PyTorch op
             tensors = SimulateFunc.apply(
                 self,

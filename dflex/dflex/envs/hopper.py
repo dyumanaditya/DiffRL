@@ -89,6 +89,11 @@ class HopperEnv(DFlexEnv):
         else:
             self.bundle_info = None
 
+        self.contact_ke = kwargs["contact"]["ke"]
+        self.contact_kd = kwargs["contact"]["kd"]
+        self.contact_kf = kwargs["contact"]["kf"]
+        self.contact_mu = kwargs["contact"]["mu"]
+
         self.init_sim()
 
         # other parameters
@@ -153,8 +158,8 @@ class HopperEnv(DFlexEnv):
                 damping=2.0,
                 contact_ke=self.contact_ke,
                 contact_kd=self.contact_kd,
-                contact_kf=1.0e3,
-                contact_mu=0.9,
+                contact_kf=self.contact_kf,
+                contact_mu=self.contact_mu,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
                 armature=1.0,
