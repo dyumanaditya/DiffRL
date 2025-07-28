@@ -2399,18 +2399,18 @@ class SimulateFunc(torch.autograd.Function):
         #####################################
 
         # find adjoint of inputs
-        print("Printing gradients")
+        # print("Printing gradients")
         adj_inputs = []
         for i in ctx.inputs:
             if i in ctx.tape.adjoints:
                 adj_inputs.append(ctx.tape.adjoints[i])
-                print(f"Input {i.shape} - {i.norm()}")
-                print(i)
-                print(ctx.tape.adjoints[i])
+                # print(f"Input {i.shape} - {i.norm()}")
+                # print(i)
+                # print(ctx.tape.adjoints[i])
             else:
                 adj_inputs.append(None)
 
-        print("========================")
+        # print("========================")
 
         # # Display gradients
         # print("Gradients:")
@@ -2636,7 +2636,7 @@ class SemiImplicitIntegrator:
                     # Select sub model and sub-states for envs in contact
                     model_sub, base_model_sub = model_in_clone.select_envs(env_ids_in_contact, num_samples)
                     # model_sub = model_in_clone
-                    print("envs in contact", env_ids_in_contact)
+                    # print("envs in contact", env_ids_in_contact)
                     state_in_sub, base_state_in_sub = state_in_clone.select_envs(num_envs, env_ids_in_contact, num_samples)
                     model_sub.collide(state_in_sub)
                     # print("=============== Model AFTER COLLIDE =============")
@@ -2743,9 +2743,9 @@ class SemiImplicitIntegrator:
             # state_out = g_state_out
             # g_state_out = None  # null reference
 
-            print("state_out joint_q", state_out.joint_q)
-            print("state_out joint_qd", state_out.joint_qd)
-            print()
+            # print("state_out joint_q", state_out.joint_q)
+            # print("state_out joint_qd", state_out.joint_qd)
+            # print()
             # raise RuntimeError
 
             return state_out
