@@ -2273,6 +2273,7 @@ def eval_rigid_integrate(
 
 g_state_out = None
 envs_in_contact = None
+envs_not_in_contact = None
 
 
 # define PyTorch autograd op to wrap simulate func
@@ -2343,8 +2344,9 @@ class SimulateFunc(torch.autograd.Function):
             # swap states
             state_in = state_out
 
-        global envs_in_contact
+        global envs_in_contact, envs_not_in_contact
         envs_in_contact = torch.nonzero(links_in_contact).squeeze(1)
+        envs_not_in_contact = torch.nonzero(~links_in_contact).squeeze(1)
 
         # print("final state")
         # print(state_out.joint_q)
@@ -2397,12 +2399,18 @@ class SimulateFunc(torch.autograd.Function):
         #####################################
 
         # find adjoint of inputs
+        print("Printing gradients")
         adj_inputs = []
         for i in ctx.inputs:
             if i in ctx.tape.adjoints:
                 adj_inputs.append(ctx.tape.adjoints[i])
+                print(f"Input {i.shape} - {i.norm()}")
+                print(i)
+                print(ctx.tape.adjoints[i])
             else:
                 adj_inputs.append(None)
+
+        print("========================")
 
         # # Display gradients
         # print("Gradients:")
@@ -2499,6 +2507,7 @@ class SemiImplicitIntegrator:
         else:
             global g_state_out
             global envs_in_contact
+            global envs_not_in_contact
 
             # get list of inputs and outputs for PyTorch tensor tracking
             inputs = [*state_in.flatten(), *model.flatten()]
@@ -2510,6 +2519,60 @@ class SemiImplicitIntegrator:
             # Store state_in before it is modified in the autograd function
             state_in_clone = state_in.clone()
             model_in_clone = model.clone()
+            state_out = model.state()
+
+            # TODO: Remvove this
+            # import os
+            # # Create save directory if it doesn't exist
+            # save_dir = "saved_simulation_data"
+            # os.makedirs(save_dir, exist_ok=True)
+            #
+            # # Save model_sub
+            # model_save_path = os.path.join(save_dir, "model_sub.pt")
+            # torch.save({
+            #     'model_state_dict': model.__dict__,
+            #     'adapter': model.adapter,
+            #     'model_class': 'Model'
+            # }, model_save_path)
+            #
+            # # Save state_in_sub
+            # state_save_path = os.path.join(save_dir, "state_in_sub.pt")
+            # torch.save({
+            #     'state_dict': state_in.__dict__,
+            #     'state_class': 'State'
+            # }, state_save_path)
+            #
+            # print(f"Saved model to {model_save_path}")
+            # print(f"Saved state_in to {state_save_path}")
+
+            # print("=============== Model AFTER COLLIDE =============")
+            # for attr, val in model.__dict__.items():
+            #     print("ORIGINAL")
+            #     print(attr)
+            #     print(val)
+            #     # if hasattr(base, attr):
+            #     #     print("BASE")
+            #     #     print(getattr(base, attr))
+            #     #     print()
+            #     # if hasattr(sub, attr):
+            #     #     print("TILED BASE")
+            #     #     print(getattr(sub, attr))
+            #     #     print()
+            # print("============================")
+            # print("=============== STATE AFTER COLLIDE =============")
+            # for attr, val in state_in.__dict__.items():
+            #     print("ORIGINAL")
+            #     print(attr)
+            #     print(val)
+            #     # if hasattr(base, attr):
+            #     #     print("BASE")
+            #     #     print(getattr(base, attr))
+            #     #     print()
+            #     # if hasattr(sub, attr):
+            #     #     print("TILED BASE")
+            #     #     print(getattr(sub, attr))
+            #     #     print()
+            # print("============================")
 
             # Randomize for each env
             # model.randomize_contact_params()
@@ -2529,11 +2592,39 @@ class SemiImplicitIntegrator:
                 *inputs
             )
 
-            state_out = g_state_out
+            # state_out = g_state_out
+            # g_state_out = None
+
+            if self.bundle_info is not None and self.bundle_info[0]:
+                # Filter out environments that ARE in contact, keep only environments NOT in contact
+
+                if envs_not_in_contact.numel() > 0:
+                    # Reshape state_out to select only environments NOT in contact
+                    joint_q = g_state_out.joint_q.view(num_envs, -1)
+                    joint_qd = g_state_out.joint_qd.view(num_envs, -1)
+
+                    # Keep only environments NOT in contact, zero out environments in contact
+                    joint_q_filtered = torch.zeros_like(joint_q)
+                    joint_qd_filtered = torch.zeros_like(joint_qd)
+
+                    # Copy only the environments NOT in contact
+                    joint_q_filtered[envs_not_in_contact] = joint_q[envs_not_in_contact]
+                    joint_qd_filtered[envs_not_in_contact] = joint_qd[envs_not_in_contact]
+
+                    # Flatten back to state_out
+                    state_out.joint_q = joint_q_filtered.reshape(-1)
+                    state_out.joint_qd = joint_qd_filtered.reshape(-1)
+            else:
+                state_out = g_state_out
+
             g_state_out = None
 
             # Check if any envs are in contact with the ground and bundle those for the substeps rollout
             env_ids_in_contact = envs_in_contact.clone()
+            # TODO: Remove
+            # env_ids_in_contact = torch.arange(num_envs, device=state_in.joint_act.device)
+            # state_out = model_in_clone.state()
+
             if env_ids_in_contact.numel() > 0:
                 # Run forward simulation for the sub-model
                 if self.bundle_info is not None and self.bundle_info[0]:
@@ -2543,97 +2634,119 @@ class SemiImplicitIntegrator:
                     bundle_len = substeps + 1
 
                     # Select sub model and sub-states for envs in contact
-                    model_sub = model_in_clone.select_envs(env_ids_in_contact)
+                    model_sub, base_model_sub = model_in_clone.select_envs(env_ids_in_contact, num_samples)
                     # model_sub = model_in_clone
-                    state_in_sub = state_in_clone.select_envs(num_envs, env_ids_in_contact)
+                    print("envs in contact", env_ids_in_contact)
+                    state_in_sub, base_state_in_sub = state_in_clone.select_envs(num_envs, env_ids_in_contact, num_samples)
                     model_sub.collide(state_in_sub)
+                    # print("=============== Model AFTER COLLIDE =============")
+                    # for attr, val in model_sub.__dict__.items():
+                    #     print("ORIGINAL")
+                    #     print(attr)
+                    #     print(val)
+                    #     # if hasattr(base, attr):
+                    #     #     print("BASE")
+                    #     #     print(getattr(base, attr))
+                    #     #     print()
+                    #     # if hasattr(sub, attr):
+                    #     #     print("TILED BASE")
+                    #     #     print(getattr(sub, attr))
+                    #     #     print()
+                    # print("============================")
+                    # print("=============== STATE AFTER COLLIDE =============")
+                    # for attr, val in state_in_sub.__dict__.items():
+                    #     print("ORIGINAL")
+                    #     print(attr)
+                    #     print(val)
+                    #     # if hasattr(base, attr):
+                    #     #     print("BASE")
+                    #     #     print(getattr(base, attr))
+                    #     #     print()
+                    #     # if hasattr(sub, attr):
+                    #     #     print("TILED BASE")
+                    #     #     print(getattr(sub, attr))
+                    #     #     print()
+                    # print("============================")
 
-                    # Accumulators for joint_q and joint_qd
-                    final_joint_q_sub = torch.zeros_like(state_in_sub.joint_q)
-                    final_joint_qd_sub = torch.zeros_like(state_in_sub.joint_qd)
+                    num_envs_sub_dup = len(env_ids_in_contact) * num_samples
+                    link_count_sub = model_sub.link_count // num_envs_sub_dup
 
-                    bundle_control = [
-                        state_in_sub.joint_act.clone() for _ in range(num_samples)
-                    ]
-                    bundle_controls = torch.stack(bundle_control, dim=0).to(dtype=torch.float32, device=model.adapter)
+                    # ------- build per‑copy control matrix ----------------------------------
+                    controls = (state_in_sub.joint_act.clone()  # flat 1‑D
+                                .to(torch.float32)
+                                .view(num_envs_sub_dup, -1))  # (E_dup, dof)
 
-                    # Add gaussian noise to the controls
+                    n_dofs_env_sub = controls.shape[1]  # dofs / env
+
+                    # which dofs get noise?
                     if noise_idx is not None:
-                        idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
+                        idx = torch.as_tensor(noise_idx, device=controls.device, dtype=torch.long)
                     else:
-                        idx = torch.arange(
-                            bundle_controls.shape[1], device=bundle_controls.device
-                        )
-                    with torch.no_grad():
-                        noise = torch.randn(
-                            num_samples, idx.numel(),
-                            dtype=bundle_controls.dtype,
-                            device=bundle_controls.device,
-                            generator=self.noise_gen,  # works
-                        ) * sigma
+                        idx = torch.arange(n_dofs_env_sub, device=controls.device)
 
-                    bundle_controls[:, idx] += noise
+                    # ---------- add Gaussian noise ------------------------------------------
+                    noise = torch.randn(controls[:, idx].shape,
+                                         dtype=controls.dtype,
+                                         device=controls.device,
+                                         generator=self.noise_gen) * sigma
 
-                    # number of envs and links for the *subset*
-                    num_envs_sub = len(env_ids_in_contact)
-                    link_count_sub = model_sub.link_count // num_envs_sub if num_envs_sub > 0 else 0
+                    controls[:, idx] += noise
+                    state_in_sub.joint_act = controls.view(-1)  # write back into the sub‑state
 
-                    for sample in range(num_samples):
-                        # clone state to avoid inplace accumulation across samples
-                        s_in = state_in_sub.clone()
-                        s_in.joint_act = bundle_controls[sample]
+                    # Randomize contact params
+                    model_sub.randomize_contact_params()
 
-                        m = model_sub.clone()  # simulate only the sub-model
+                    # Run one forward simulation for all num_samples bundles
+                    # inputs = [*base_state_in_sub.flatten(), *base_model_sub.flatten()]
+                    inputs = [*state_in_sub.flatten(), *model_sub.flatten()]
+                    # inputs = [*state_in_sub.flatten(), *base_model_sub.flatten()]
 
-                        # Randomize contact params for bundle
-                        m.randomize_contact_params()
+                    tensors = SimulateFunc.apply(
+                        self,
+                        model_sub,
+                        state_in_sub,
+                        dt,
+                        substeps,
+                        mass_matrix_freq,
+                        reset_tape,
+                        self.bundle_info,
+                        num_envs_sub_dup,
+                        link_count_sub,
+                        *inputs
+                    )
 
-                        inputs = [*s_in.flatten(), *m.flatten()]
+                    # g_state_out now holds the stacked result
+                    bundled_state = g_state_out
+                    g_state_out = None
 
-                        tensors = SimulateFunc.apply(
-                            self,
-                            m,
-                            s_in,
-                            dt,
-                            substeps,
-                            mass_matrix_freq,
-                            reset_tape,
-                            self.bundle_info,
-                            num_envs_sub,
-                            link_count_sub,
-                            *inputs
-                        )
+                    # average the copies   (shape: [envs_sub, num_samples, ...])
+                    q = bundled_state.joint_q.view(num_envs_sub_dup, -1)
+                    qd = bundled_state.joint_qd.view(num_envs_sub_dup, -1)
 
-                        final_joint_q_sub += g_state_out.joint_q
-                        final_joint_qd_sub += g_state_out.joint_qd
-                        g_state_out = None  # clear for next sample
-                        torch.cuda.empty_cache()
+                    # print("q", q)
+                    # print("qd", qd)
 
-                    # Average the final sub joint_q and joint_qd
-                    final_joint_q_sub /= num_samples
-                    final_joint_qd_sub /= num_samples
+                    q = q.view(len(env_ids_in_contact), num_samples, -1).mean(dim=1)
+                    qd = qd.view(len(env_ids_in_contact), num_samples, -1).mean(dim=1)
 
-                    # Replace the envs in contact with new bundled states
+                    # write the bundle‑averaged states back into the **full** batch
                     joint_q = state_out.joint_q.view(num_envs, -1).clone()
                     joint_qd = state_out.joint_qd.view(num_envs, -1).clone()
 
-                    final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
-                    final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
+                    joint_q[env_ids_in_contact] = q
+                    joint_qd[env_ids_in_contact] = qd
 
-                    joint_q[env_ids_in_contact] = final_joint_q_sub
-                    joint_qd[env_ids_in_contact] = final_joint_qd_sub
-
-                    # Flatten back to original shape
-                    state_out.joint_q = joint_q.view(-1)
-                    state_out.joint_qd = joint_qd.view(-1)
+                    state_out.joint_q = joint_q.reshape(-1)
+                    state_out.joint_qd = joint_qd.reshape(-1)
 
             # # global g_state_out
             # state_out = g_state_out
             # g_state_out = None  # null reference
 
-            # print("state_out joint_q", state_out.joint_q)
-            # print("state_out joint_qd", state_out.joint_qd)
-            # print()
+            print("state_out joint_q", state_out.joint_q)
+            print("state_out joint_qd", state_out.joint_qd)
+            print()
+            # raise RuntimeError
 
             return state_out
 

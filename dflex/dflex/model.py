@@ -180,64 +180,278 @@ class State:
 
         return tensors
 
-    def clone(self):
+    def clone(self, detach=False):
         s = State()
         for attr, value in self.__dict__.items():
             if torch.is_tensor(value):
-                setattr(s, attr, torch.clone(value))
+                if detach:
+                    setattr(s, attr, value.clone().detach())
+                else:
+                    setattr(s, attr, torch.clone(value))
             else:
                 setattr(s, attr, copy.deepcopy(value))
         return s
 
+    # ------------------------------------------------------------------ #
+    # helper:  gather a [E*block,…] tensor for env_ids                    #
+    # ------------------------------------------------------------------ #
     @staticmethod
-    def _slice_by_env(flat, num_envs, env_ids):
-        """
-        Reshape a tensor laid out as [num_envs * per_env, …] so we can
-        index environments, then flatten again.
-        """
+    def _slice_by_env(flat: torch.Tensor,
+                      num_envs: int,
+                      env_ids: torch.Tensor) -> torch.Tensor | None:
         if flat is None or not torch.is_tensor(flat):
             return flat
         if flat.numel() == 0 or flat.shape[0] % num_envs != 0:
-            return flat  # globals stay unchanged
+            return flat  # global → unchanged
 
-        per_env = flat.shape[0] // num_envs
-        new_shape = (num_envs, per_env, *flat.shape[1:])
-        return (flat.view(*new_shape)[env_ids]  # keep envs
-                .reshape(-1, *flat.shape[1:]))  # back to flat
+        block = flat.shape[0] // num_envs
+        return (flat.view(num_envs, block, *flat.shape[1:])  # (E,block,…)
+                [env_ids]  # pick envs
+                .reshape(-1, *flat.shape[1:]))  # flatten
 
-    def select_envs(self, num_envs: int, env_ids: torch.Tensor) -> "State":
+    # ------------------------------------------------------------------ #
+    # helper:  repeat a [E*block,…] tensor r times (data, no indices)     #
+    # ------------------------------------------------------------------ #
+    def _tile_blocks(self, t: torch.Tensor, block: int, r: int, detach: bool = False):
+        if t is None or not torch.is_tensor(t) or block == 0 or r == 1:
+            return t
+        E = t.shape[0] // block
+        if detach:
+            return (t.view(E, block, *t.shape[1:])  # (E,block,…)
+                    .repeat_interleave(r, dim=0)  # envs duplicated
+                    .reshape(-1, *t.shape[1:])
+                    .detach().clone())
+        else:
+            return (t.view(E, block, *t.shape[1:])  # (E,block,…)
+                    .repeat_interleave(r, dim=0)  # envs duplicated
+                    .reshape(-1, *t.shape[1:]))
+
+    # ------------------------------------------------------------------ #
+    # helper:  repeat an *index* tensor and add correct offset            #
+    #          (used for contact_body0/1)                                 #
+    # ------------------------------------------------------------------ #
+    def _tile_index(self,
+                    idx: torch.Tensor,
+                    block: int,
+                    r: int,
+                    stride: int,
+                    detach: bool = True):
+        if idx is None or not torch.is_tensor(idx) or block == 0 or r == 1:
+            return idx
+
+        E = idx.shape[0] // block
+        tiled = self._tile_blocks(idx, block, r, detach)
+
+        # offset 0, E*stride, 2*E*stride, …  per copy
+        copy_off = (torch.arange(r, device=idx.device) * E * stride
+                    ).repeat_interleave(block).repeat(E)
+
+        mask = tiled >= 0  # keep -1 entries
+        while copy_off.ndim < tiled.ndim:
+            copy_off = copy_off.unsqueeze(-1)
+        tiled = tiled.clone()
+        tiled[mask] += copy_off[mask]
+        return tiled
+
+    # ------------------------------------------------------------------ #
+    # main entry                                                          #
+    # ------------------------------------------------------------------ #
+    def select_envs(self,
+                    num_envs: int,
+                    env_ids: torch.Tensor,
+                    num_samples: int = 1) -> "State":
         """
-        Returns a *new* State containing only the environments in `env_ids`.
+        Return a *new* State that contains the environments in `env_ids`,
+        each repeated `num_samples` times (default=1 keeps original behaviour).
 
-        Args
-        ----
-        num_envs   : how many environments the *original* batch held
-        env_ids    : 1‑D LongTensor with the indices to keep, on any device
+        Parameters
+        ----------
+        num_envs     : number of environments in the current (full) batch
+        env_ids      : 1‑D LongTensor with indices of the environments to keep
+        num_samples  : how many virtual copies of **each** selected environment
+                       to stack.
         """
 
+        # ---------- step1: slice down to the requested envs ---------------
         env_ids = env_ids.to(torch.long)
-        assert env_ids.ndim == 1, "env_ids must be a 1‑D LongTensor"
+        assert env_ids.ndim == 1, "env_ids must be 1‑D LongTensor"
 
-        # deep‑copy Python containers & tensors first
-        sub = self.clone()
-        keep = len(env_ids)  # new batch size
+        base = self.clone()  # deep‑copy scalars, lists, tensors
+        keep = len(env_ids)  # environments after slicing
         ratio = keep / num_envs
 
-        # update the per‑env counters if they exist
-        for name in ("particle_count", "link_count", "contact_count"):
-            if hasattr(sub, name) and not torch.is_tensor(getattr(sub, name)):
-                setattr(sub, name, int(getattr(sub, name) * ratio))
+        # update the simple numeric counters (they are scalars, not tensors)
+        for name in ("particle_count", "link_count"):
+            if hasattr(base, name) and not torch.is_tensor(getattr(base, name)):
+                setattr(base, name, int(getattr(base, name) * ratio))
 
-        # slice every tensor attribute
+        # slice every tensor attribute whose first dim is E*block
         for attr, val in self.__dict__.items():
             if torch.is_tensor(val):
-                setattr(sub, attr,
+                setattr(base, attr,
                         self._slice_by_env(val, num_envs, env_ids).clone())
             elif isinstance(val, list) and val and torch.is_tensor(val[0]):
-                setattr(sub, attr,
-                        [self._slice_by_env(v, num_envs, env_ids).clone() for v in val])
+                setattr(base, attr,
+                        [self._slice_by_env(v, num_envs, env_ids).clone()
+                         for v in val])
 
-        return sub
+        # ---------- step2: duplicate each env if requested ----------------
+        if num_samples == 1:
+            return base  # original behaviour
+
+        # clone again so we overwrite only the tensors
+        sub = base.clone(detach=False)
+
+        E = keep
+        r = num_samples
+
+        # per‑env sizes derived from tensor lengths (robust – no Model needed)
+        n_particles_env = (base.particle_q.shape[0] // E) if hasattr(base, "particle_q") else 0
+        n_links_env = (base.link_count // E) if base.link_count else 0
+        n_coords_env = (base.joint_q.shape[0] // E) if hasattr(base, "joint_q") else 0
+        n_dofs_env = (base.joint_qd.shape[0] // E) if hasattr(base, "joint_qd") else 0
+
+        # helper to tile a data tensor (no index shifting necessary)
+        def _tile(t, block, detach=True):
+            return self._tile_blocks(t, block, r, detach) if block else t
+
+        # particle tensors
+        if n_particles_env:
+            sub.particle_q = _tile(base.particle_q, n_particles_env)
+            sub.particle_qd = _tile(base.particle_qd, n_particles_env)
+            if hasattr(base, "particle_f"):
+                sub.particle_f = _tile(base.particle_f, n_particles_env)
+
+        # articulation tensors
+        if n_links_env:
+            # body‑level tensors
+            per_link_blocks = (
+                "body_X_sc", "body_X_sm", "body_I_s", "body_v_s",
+                "body_a_s", "body_f_s", "contact_f", "contact_count"
+            )
+            for name in per_link_blocks:
+                if hasattr(base, name):
+                    setattr(sub, name, _tile(getattr(base, name), n_links_env, detach=False))
+
+        if n_coords_env:
+            sub.joint_q = _tile(base.joint_q, n_coords_env, detach=False)
+        if n_dofs_env:
+            sub.joint_qd = _tile(base.joint_qd, n_dofs_env, detach=False)
+            if hasattr(base, "joint_qdd"):
+                sub.joint_qdd = _tile(base.joint_qdd, n_dofs_env, detach=False)
+            if hasattr(base, "joint_tau"):
+                sub.joint_tau = _tile(base.joint_tau, n_dofs_env, detach=False)
+            if hasattr(base, "joint_S_s"):
+                sub.joint_S_s = _tile(base.joint_S_s, n_dofs_env, detach=False)
+
+        # joint_act is per‑dof too
+        if hasattr(base, "joint_act"):
+            sub.joint_act = _tile(base.joint_act, n_dofs_env, detach=False)
+
+        # -------- update counters to reflect the duplication ---------------
+        if n_particles_env:
+            sub.particle_count *= r
+        if n_links_env:
+            sub.link_count *= r
+
+        # print("=============== STATE =============")
+        # for attr, val in self.__dict__.items():
+        #     print("ORIGINAL")
+        #     print(attr)
+        #     print(val)
+        #     if hasattr(base, attr):
+        #         print("BASE")
+        #         print(getattr(base, attr))
+        #         print()
+        #     if hasattr(sub, attr):
+        #         print("TILED BASE")
+        #         print(getattr(sub, attr))
+        #         print()
+        # print("============================")
+
+        # TODO: Remove
+        # import os
+        # # Load model
+        # save_dir = "saved_simulation_data"
+        #
+        # # Load state
+        # state_save_path = os.path.join(save_dir, "state_in_sub.pt")
+        # state_data = torch.load(state_save_path)
+        #
+        # # Reconstruct state object
+        # s = State()
+        # s.__dict__.update(state_data['state_dict'])
+        #
+        # print(f"Loaded state_in_sub from {state_save_path}")
+        #
+        # sub.particle_count = s.particle_count
+        # sub.link_count = s.link_count
+        # sub.joint_q = s.joint_q
+        # sub.joint_qd = s.joint_qd
+        # sub.joint_act = s.joint_act
+        # sub.joint_qdd = s.joint_qdd
+        # sub.joint_tau = s.joint_tau
+        # sub.joint_S_s = s.joint_S_s
+        # sub.body_X_sc = s.body_X_sc
+        # sub.body_X_sm = s.body_X_sm
+        # sub.body_I_s = s.body_I_s
+        # sub.body_v_s = s.body_v_s
+        # sub.body_a_s = s.body_a_s
+        # sub.body_f_s = s.body_f_s
+        # sub.contact_f = s.contact_f
+        # sub.contact_count = s.contact_count
+
+        return sub, base
+    
+    # @staticmethod
+    # def _slice_by_env(flat, num_envs, env_ids):
+    #     """
+    #     Reshape a tensor laid out as [num_envs * per_env, …] so we can
+    #     index environments, then flatten again.
+    #     """
+    #     if flat is None or not torch.is_tensor(flat):
+    #         return flat
+    #     if flat.numel() == 0 or flat.shape[0] % num_envs != 0:
+    #         return flat  # globals stay unchanged
+    # 
+    #     per_env = flat.shape[0] // num_envs
+    #     new_shape = (num_envs, per_env, *flat.shape[1:])
+    #     return (flat.view(*new_shape)[env_ids]  # keep envs
+    #             .reshape(-1, *flat.shape[1:]))  # back to flat
+    # 
+    # def select_envs(self, num_envs: int, env_ids: torch.Tensor) -> "State":
+    #     """
+    #     Returns a *new* State containing only the environments in `env_ids`.
+    # 
+    #     Args
+    #     ----
+    #     num_envs   : how many environments the *original* batch held
+    #     env_ids    : 1‑D LongTensor with the indices to keep, on any device
+    #     """
+    # 
+    #     env_ids = env_ids.to(torch.long)
+    #     assert env_ids.ndim == 1, "env_ids must be a 1‑D LongTensor"
+    # 
+    #     # deep‑copy Python containers & tensors first
+    #     sub = self.clone()
+    #     keep = len(env_ids)  # new batch size
+    #     ratio = keep / num_envs
+    # 
+    #     # update the per‑env counters if they exist
+    #     for name in ("particle_count", "link_count", "contact_count"):
+    #         if hasattr(sub, name) and not torch.is_tensor(getattr(sub, name)):
+    #             setattr(sub, name, int(getattr(sub, name) * ratio))
+    # 
+    #     # slice every tensor attribute
+    #     for attr, val in self.__dict__.items():
+    #         if torch.is_tensor(val):
+    #             setattr(sub, attr,
+    #                     self._slice_by_env(val, num_envs, env_ids).clone())
+    #         elif isinstance(val, list) and val and torch.is_tensor(val[0]):
+    #             setattr(sub, attr,
+    #                     [self._slice_by_env(v, num_envs, env_ids).clone() for v in val])
+    # 
+    #     return sub
 
 
 class Model:
@@ -705,7 +919,7 @@ class Model:
 
         self.contact_count = len(body0)
 
-    def clone(self) -> "Model":
+    def clone(self, detach=False) -> "Model":
         """
         Return a copy of this Model whose Tensor attributes have been .clone()'d
         so you can mutate one without affecting the other, while still preserving
@@ -718,7 +932,10 @@ class Model:
         # for every attr that is a torch.Tensor, replace with a .clone()
         for attr, value in self.__dict__.items():
             if torch.is_tensor(value):
-                setattr(m, attr, torch.clone(value))
+                if detach:
+                    setattr(m, attr, value.clone().detach())
+                else:
+                    setattr(m, attr, torch.clone(value))
             else:
                 setattr(m, attr, copy.deepcopy(value))
 
@@ -741,7 +958,447 @@ class Model:
                 [env_ids]  # keep only chosen envs
                 .reshape(-1, *flat.shape[1:]))  # back to flat
 
-    def select_envs(self, env_ids: torch.Tensor) -> "Model":
+    def select_envs(self,
+                    env_ids: torch.Tensor,
+                    num_samples: int = 1) -> "Model":
+        """
+        Return a *new* Model that contains each environment in `env_ids`
+        **replicated** `num_samples` times (default 1 ⇒ behaviour unchanged).
+        """
+
+        # 1. First, slice down to env_ids the same way you already do
+        base = self._select_envs(env_ids)  # ← your current body,
+        #    extracted verbatim
+
+        # 2. If only one copy requested we're done
+        if num_samples == 1:
+            return base
+
+        # --------------------------------------------------------------
+        # helper lambdas (block‑tiling)
+        # --------------------------------------------------------------
+        def _tile_blocks(t, block, r, detach=False):
+            if t is None or not torch.is_tensor(t) or block == 0:
+                return t
+            E = t.shape[0] // block
+            if detach:
+                return (t.view(E, block, *t.shape[1:])
+                        .repeat_interleave(r, dim=0)
+                        .reshape(-1, *t.shape[1:])
+                        .detach().clone())
+            else:
+                return (t.view(E, block, *t.shape[1:])
+                        .repeat_interleave(r, dim=0)
+                        .reshape(-1, *t.shape[1:]))
+
+        def _tile_joint_parent(parent: torch.Tensor,
+                               n_links_env: int,
+                               r: int,
+                               E: int) -> torch.Tensor | None:
+            """
+            Repeat `parent` `r` times (env‑major order) and shift indices so they
+            stay contiguous.  `parent` already contains the env‑offsets produced by
+            _select_envs, so we add ONLY a copy‑offset.
+
+            copy‑offset  =  c * E * n_links_env      for copy c = 0 … r‑1
+            """
+            if parent is None or not torch.is_tensor(parent) or r == 1:
+                return parent
+
+            mask = parent >= 0  # roots stay at -1
+            copies = [parent]  # copy‑0 unchanged
+
+            stride_copy = E * n_links_env
+            for c in range(1, r):
+                blk = parent.clone()
+                blk[mask] += c * stride_copy
+                copies.append(blk)
+
+            return torch.cat(copies, dim=0)
+
+        def _tile_contact_material(mat: torch.Tensor,
+                                   block: int,
+                                   r: int,
+                                   n_shapes_env: int,
+                                   E: int) -> torch.Tensor | None:
+            """
+            Repeat `mat` (laid out as E×block) `r` times and add
+            copy_offset = c * (E * n_shapes_env)    for copy c = 0 … r‑1
+            """
+            if mat is None or not torch.is_tensor(mat) or block == 0 or r == 1:
+                return mat
+
+            shapes_total = E * n_shapes_env  # shapes in the *base* slice
+            _base = mat.view(E, block, *mat.shape[1:])
+
+            copies = [_base]  # copy‑0 unchanged
+            for c in range(1, r):
+                copies.append(_base + c * shapes_total)
+
+            return torch.cat(copies, dim=0).reshape(-1, *mat.shape[1:])
+
+        # ── replace the old version completely ───────────────────────────────────
+        def _tile_index(idx: torch.Tensor,
+                        block: int,
+                        r: int,
+                        stride: int) -> torch.Tensor | None:
+            """
+            Repeat each per‑environment block `r` times *and* add
+            `stride * k` to every non‑negative entry in the k‑th repetition.
+
+            Negative entries (e.g. -1 roots, ground) stay untouched.
+            """
+            if idx is None or not torch.is_tensor(idx) or block == 0:
+                return idx
+
+            E = idx.shape[0] // block  # envs in the base model
+            tiled = (idx.view(E, block, *idx.shape[1:])  # (E,block,…)
+                     .repeat_interleave(r, dim=0)  # (E*r,block,…)
+                     .reshape(-1, *idx.shape[1:]))
+
+            off = (torch.arange(E * r, device=idx.device)
+                   .repeat_interleave(block) * stride)  # (E*r*block,)
+
+            while off.ndim < tiled.ndim:  # broadcast to ndim of idx
+                off = off.unsqueeze(-1)
+
+            mask = tiled >= 0  # don't move -1 entries
+            tiled = tiled.clone()
+            tiled[mask] += off[mask]
+            return tiled
+
+        # --------------------------------------------------------------
+        # per‑env sizes (valid for *base*, i.e. after selection)
+        # --------------------------------------------------------------
+        E0 = int(base.articulation_count)  # envs in base
+        n_particles_env = base.particle_count // E0
+        n_links_env = base.link_count // E0
+        n_shapes_env = base.shape_count // E0
+        n_springs_env = base.spring_count // E0
+        n_edges_env = base.edge_count // E0
+        n_tris_env = base.tri_count // E0
+        n_tets_env = base.tet_count // E0
+        n_coords_env = base.joint_coord_count // E0
+        n_dofs_env = base.joint_dof_count // E0
+        n_contacts_env = base.contact_count // E0 if base.contact_count else 0
+        n_muscles_env = getattr(base, "muscle_count", 0) // E0 if getattr(base, "muscle_count", 0) else 0
+
+        r = num_samples  # alias
+
+        # --------------------------------------------------------------
+        # Clone once so we don't mutate `base`
+        # --------------------------------------------------------------
+        import copy
+        # sub = copy.deepcopy(base)
+        sub = base.clone(detach=False)
+        # sub = Model(self.adapter)
+        sub.gravity = base.gravity
+
+        # --------------------------------------------------------------
+        # 2.a Data tensors that do *not* store indices
+        # --------------------------------------------------------------
+        sub.particle_q = _tile_blocks(base.particle_q, n_particles_env, r)
+        sub.particle_qd = _tile_blocks(base.particle_qd, n_particles_env, r)
+        sub.particle_mass = _tile_blocks(base.particle_mass, n_particles_env, r)
+        sub.particle_inv_mass = _tile_blocks(base.particle_inv_mass, n_particles_env, r)
+
+        sub.shape_transform = _tile_blocks(base.shape_transform, n_shapes_env, r)
+        sub.shape_geo_type = _tile_blocks(base.shape_geo_type, n_shapes_env, r)
+        sub.shape_geo_scale = _tile_blocks(base.shape_geo_scale, n_shapes_env, r)
+        sub.shape_materials = _tile_blocks(base.shape_materials, n_shapes_env, r)
+        # shape_geo_src is a list → repeat it r times
+        if isinstance(base.shape_geo_src, list):
+            sub.shape_geo_src = base.shape_geo_src * r
+
+        sub.spring_rest_length = _tile_blocks(base.spring_rest_length, n_springs_env, r)
+        sub.spring_stiffness = _tile_blocks(base.spring_stiffness, n_springs_env, r)
+        sub.spring_damping = _tile_blocks(base.spring_damping, n_springs_env, r)
+        sub.spring_control = _tile_blocks(base.spring_control, n_springs_env, r)
+
+        sub.tri_poses = _tile_blocks(base.tri_poses, n_tris_env, r)
+        sub.tri_activations = _tile_blocks(base.tri_activations, n_tris_env, r)
+
+        sub.edge_rest_angle = _tile_blocks(base.edge_rest_angle, n_edges_env, r)
+
+        sub.tet_poses = _tile_blocks(base.tet_poses, n_tets_env, r)
+        sub.tet_activations = _tile_blocks(base.tet_activations, n_tets_env, r)
+        sub.tet_materials = _tile_blocks(base.tet_materials, n_tets_env, r)
+
+        sub.body_I_m = _tile_blocks(base.body_I_m, n_links_env, r)
+        sub.joint_type = _tile_blocks(base.joint_type, n_links_env, r)
+        sub.joint_X_pj = _tile_blocks(base.joint_X_pj, n_links_env, r)
+        sub.joint_X_cm = _tile_blocks(base.joint_X_cm, n_links_env, r)
+        sub.joint_axis = _tile_blocks(base.joint_axis, n_links_env, r)
+
+        sub.joint_target_ke = _tile_blocks(base.joint_target_ke, n_links_env, r)
+        sub.joint_target_kd = _tile_blocks(base.joint_target_kd, n_links_env, r)
+        sub.joint_target = _tile_blocks(base.joint_target, n_coords_env, r)
+        # sub.joint_target = torch.zeros(14, dtype=torch.float32, device=sub.adapter)
+        sub.joint_armature = _tile_blocks(base.joint_armature, n_dofs_env, r)
+
+        sub.joint_limit_lower = _tile_blocks(base.joint_limit_lower, n_coords_env, r)
+        sub.joint_limit_upper = _tile_blocks(base.joint_limit_upper, n_coords_env, r)
+        sub.joint_limit_ke = _tile_blocks(base.joint_limit_ke, n_coords_env, r)
+        sub.joint_limit_kd = _tile_blocks(base.joint_limit_kd, n_coords_env, r)
+
+        # --------------------------------------------------------------
+        # 2.b Index tensors — need offset for each copy
+        # --------------------------------------------------------------
+        sub.shape_body = _tile_index(base.shape_body, n_shapes_env, r, n_links_env)
+        sub.spring_indices = _tile_index(base.spring_indices, n_springs_env * 2, r,
+                                         n_particles_env)
+        sub.tri_indices = _tile_index(base.tri_indices, n_tris_env * 3, r,
+                                      n_particles_env)
+        sub.edge_indices = _tile_index(base.edge_indices, n_edges_env * 4, r,
+                                       n_particles_env)
+        sub.tet_indices = _tile_index(base.tet_indices, n_tets_env * 4, r,
+                                      n_particles_env)
+
+        sub.joint_parent = _tile_joint_parent(base.joint_parent,
+                                              n_links_env,
+                                              r,
+                                              E0)
+
+        # contact arrays
+        if n_contacts_env:
+            sub.contact_body0 = _tile_index(base.contact_body0, n_contacts_env, r, n_links_env)
+            sub.contact_body1 = _tile_index(base.contact_body1, n_contacts_env, r, n_links_env)
+            sub.contact_point0 = _tile_blocks(base.contact_point0, n_contacts_env, r)
+            sub.contact_dist = _tile_blocks(base.contact_dist, n_contacts_env, r)
+            sub.contact_material = _tile_contact_material(base.contact_material,
+                                                          n_contacts_env,
+                                                          r,
+                                                          n_shapes_env,
+                                                          E0)
+
+        # muscle arrays
+        if n_muscles_env:
+            sub.muscle_start = _tile_index(base.muscle_start, n_muscles_env, r,
+                                           base.muscle_links.shape[0] // E0)
+            sub.muscle_params = _tile_blocks(base.muscle_params, n_muscles_env, r)
+            sub.muscle_activation = _tile_blocks(base.muscle_activation, n_muscles_env, r)
+            # muscle_links / points
+            sub.muscle_links = _tile_index(base.muscle_links,
+                                           base.muscle_links.shape[0] // E0,
+                                           r, n_links_env)
+            sub.muscle_points = _tile_blocks(base.muscle_points,
+                                             base.muscle_points.shape[0] // E0,
+                                             r)
+
+        # --------------------------------------------------------------
+        # 2.c  Offset arrays (per‑env starts) – rebuild contiguous ones
+        # --------------------------------------------------------------
+        n_keep = E0 * r
+        sub.articulation_count = n_keep
+        sub.articulation_joint_start = torch.arange(0, n_keep + 1, device=sub.adapter, dtype=base.articulation_joint_start.dtype) * n_links_env
+        sub.articulation_coord_start = torch.arange(0, n_keep, device=sub.adapter) * n_coords_env
+        sub.articulation_dof_start = torch.arange(0, n_keep, device=sub.adapter, dtype=base.articulation_dof_start.dtype) * n_dofs_env
+
+        # joint_q_start / joint_qd_start
+        n_keep = E0 * r  # total envs after tiling
+
+        if n_coords_env:
+            base_q_start = base.joint_q_start[: n_links_env + 1].clone()
+            q_start_blocks = []
+            for c in range(r):
+                blk = base_q_start + c * n_coords_env
+                if c:  # skip leading 0 after first env to avoid duplicates
+                    blk = blk[1:]
+                q_start_blocks.append(blk)
+            sub.joint_q_start = torch.cat(q_start_blocks, dim=0).to(base.joint_q_start.dtype)
+
+        if n_dofs_env:
+            base_qd_start = base.joint_qd_start[: n_links_env + 1].clone()
+            qd_start_blocks = []
+            for c in range(r):
+                blk = base_qd_start + c * n_dofs_env
+                if c:
+                    blk = blk[1:]
+                qd_start_blocks.append(blk)
+            sub.joint_qd_start = torch.cat(qd_start_blocks, dim=0).to(base.joint_qd_start.dtype)
+
+        sub.joint_q = _tile_blocks(base.joint_q, n_coords_env, r, detach=False).clone()
+        sub.joint_qd = _tile_blocks(base.joint_qd, n_dofs_env, r, detach=False).clone()
+
+        # J/M/H offset arrays and sizes
+        if hasattr(sub, "articulation_J_rows"):
+            J_rows = n_links_env * 6
+            J_cols = n_dofs_env
+            M_rows = n_links_env * 6
+            H_rows = n_dofs_env
+            sub.articulation_J_rows = torch.full((n_keep,), J_rows, dtype=sub.articulation_J_rows.dtype,
+                                                 device=sub.adapter)
+            sub.articulation_J_cols = torch.full((n_keep,), J_cols, dtype=sub.articulation_J_cols.dtype,
+                                                 device=sub.adapter)
+            sub.articulation_M_rows = torch.full((n_keep,), M_rows, dtype=sub.articulation_M_rows.dtype,
+                                                 device=sub.adapter)
+            sub.articulation_H_rows = torch.full((n_keep,), H_rows, dtype=sub.articulation_H_rows.dtype,
+                                                 device=sub.adapter)
+            sub.articulation_J_start = torch.arange(n_keep, device=sub.adapter) * (J_rows * J_cols)
+            sub.articulation_M_start = torch.arange(n_keep, device=sub.adapter) * (M_rows * M_rows)
+            sub.articulation_H_start = torch.arange(n_keep, device=sub.adapter) * (H_rows * H_rows)
+            sub.J_size = (sub.articulation_J_rows * sub.articulation_J_cols).sum().item()
+            sub.M_size = (sub.articulation_M_rows ** 2).sum().item()
+            sub.H_size = (sub.articulation_H_rows ** 2).sum().item()
+
+        # scalar counters
+        sub.particle_count *= r
+        sub.link_count *= r
+        sub.shape_count *= r
+        sub.spring_count *= r
+        sub.edge_count *= r
+        sub.tri_count *= r
+        sub.tet_count *= r
+        sub.joint_coord_count *= r
+        sub.joint_dof_count *= r
+        if n_contacts_env:
+            sub.contact_count *= r
+        if n_muscles_env:
+            sub.muscle_count *= r
+
+        # print("================ MODEL =============")
+        # for attr, val in self.__dict__.items():
+        #     print("ORIGINAL")
+        #     print(attr)
+        #     print(val)
+        #     if hasattr(base, attr):
+        #         print("BASE")
+        #         print(getattr(base, attr))
+        #         print()
+        #     if hasattr(sub, attr):
+        #         print("TILED BASE")
+        #         print(getattr(sub, attr))
+        #         print()
+        # print("============================")
+        #
+        # # TODO: Remove
+        # import os
+        # # Load model
+        # save_dir = "saved_simulation_data"
+        # model_save_path = os.path.join(save_dir, "model_sub.pt")
+        # model_data = torch.load(model_save_path)
+        #
+        # # Reconstruct model object
+        # m = Model(model_data['adapter'])
+        # m.__dict__.update(model_data['model_state_dict'])
+        #
+        # print(f"Loaded model_sub from {model_save_path}")
+        # # sub.particle_q = m.particle_q
+        # # sub.particle_qd = m.particle_qd
+        # # sub.particle_mass = m.particle_mass
+        # # sub.particle_inv_mass = m.particle_inv_mass
+        # # sub.shape_transform = m.shape_transform
+        # # sub.shape_body = m.shape_body
+        # # sub.shape_geo_type = m.shape_geo_type
+        # # sub.shape_geo_src = m.shape_geo_src
+        # # sub.shape_geo_scale = m.shape_geo_scale
+        # # sub.shape_materials = m.shape_materials
+        # # sub.spring_indices = m.spring_indices
+        # # sub.spring_rest_length = m.spring_rest_length
+        # # sub.spring_stiffness = m.spring_stiffness
+        # # sub.spring_damping = m.spring_damping
+        # # sub.spring_control = m.spring_control
+        # # sub.tri_indices = m.tri_indices
+        # # sub.tri_poses = m.tri_poses
+        # # sub.tri_activations = m.tri_activations
+        # # sub.edge_indices = m.edge_indices
+        # # sub.edge_rest_angle = m.edge_rest_angle
+        # # sub.tet_indices = m.tet_indices
+        # # sub.tet_poses = m.tet_poses
+        # # sub.tet_activations = m.tet_activations
+        # # sub.tet_materials = m.tet_materials
+        # sub.body_X_cm = m.body_X_cm
+        # sub.body_I_m = m.body_I_m
+        # sub.articulation_start = m.articulation_start
+        # sub.joint_q = m.joint_q
+        # sub.joint_qd = m.joint_qd
+        # sub.joint_type = m.joint_type
+        # sub.joint_parent = m.joint_parent
+        # sub.joint_X_pj = m.joint_X_pj
+        # sub.joint_X_cm = m.joint_X_cm
+        # sub.joint_axis = m.joint_axis
+        # sub.joint_q_start = m.joint_q_start
+        # sub.joint_qd_start = m.joint_qd_start
+        # sub.joint_armature = m.joint_armature
+        # sub.joint_target_ke = m.joint_target_ke
+        # sub.joint_target_kd = m.joint_target_kd
+        # sub.joint_target = m.joint_target
+        # sub.particle_count = m.particle_count
+        # sub.joint_coord_count = m.joint_coord_count
+        # sub.joint_dof_count = m.joint_dof_count
+        # sub.link_count = m.link_count
+        # sub.shape_count = m.shape_count
+        # sub.tri_count = m.tri_count
+        # sub.tet_count = m.tet_count
+        # sub.edge_count = m.edge_count
+        # sub.spring_count = m.spring_count
+        # sub.contact_count = m.contact_count
+        # sub.gravity = m.gravity
+        # sub.contact_distance = m.contact_distance
+        # sub.contact_ke = m.contact_ke
+        # sub.contact_kd = m.contact_kd
+        # sub.contact_kf = m.contact_kf
+        # sub.contact_mu = m.contact_mu
+        # sub.tri_ke = m.tri_ke
+        # sub.tri_ka = m.tri_ka
+        # sub.tri_kd = m.tri_kd
+        # sub.tri_kb = m.tri_kb
+        # sub.tri_drag = m.tri_drag
+        # sub.tri_lift = m.tri_lift
+        # sub.edge_ke = m.edge_ke
+        # sub.edge_kd = m.edge_kd
+        # sub.particle_radius = m.particle_radius
+        # sub.adapter = m.adapter
+        # sub.J_size = m.J_size
+        # sub.M_size = m.M_size
+        # sub.H_size = m.H_size
+        # sub.geo_meshes = m.geo_meshes
+        # sub.geo_sdfs = m.geo_sdfs
+        # sub.ground = m.ground
+        # sub.enable_tri_collisions = m.enable_tri_collisions
+        # sub.joint_limit_lower = m.joint_limit_lower
+        # sub.joint_limit_upper = m.joint_limit_upper
+        # sub.joint_limit_ke = m.joint_limit_ke
+        # sub.joint_limit_kd = m.joint_limit_kd
+        # # print("COMPARE")
+        # # print("articulation_joint_start")
+        # # print(sub.articulation_joint_start)
+        # # print(m.articulation_joint_start)
+        # sub.articulation_joint_start = m.articulation_joint_start
+        # sub.articulation_count = m.articulation_count
+        # sub.articulation_coord_start = m.articulation_coord_start
+        # # print("articulation_dof_start")
+        # # print(sub.articulation_dof_start)
+        # # print(m.articulation_dof_start)
+        # # sub.articulation_dof_start = m.articulation_dof_start
+        # sub.J = m.J
+        # sub.M = m.M
+        # sub.P = m.P
+        # sub.H = m.H
+        # sub.L = m.L
+        # sub.muscle_count = m.muscle_count
+        # sub.contact_body0 = m.contact_body0
+        # sub.contact_body1 = m.contact_body1
+        # sub.contact_point0 = m.contact_point0
+        # sub.contact_dist = m.contact_dist
+        # sub.contact_material = m.contact_material
+        # sub.muscle_start = m.muscle_start
+        # sub.muscle_params = m.muscle_params
+        # sub.muscle_activation = m.muscle_activation
+        # sub.muscle_links = m.muscle_links
+        # sub.muscle_points = m.muscle_points
+        # sub.articulation_J_rows = m.articulation_J_rows
+        # sub.articulation_J_cols = m.articulation_J_cols
+        # sub.articulation_M_rows = m.articulation_M_rows
+        # sub.articulation_H_rows = m.articulation_H_rows
+        # sub.articulation_J_start = m.articulation_J_start
+        # sub.articulation_M_start = m.articulation_M_start
+        # sub.articulation_H_start = m.articulation_H_start
+        # sub.contact_randomization = None
+
+        return sub, base
+
+    def _select_envs(self, env_ids: torch.Tensor) -> "Model":
         """Return a *new* Model that contains *only* the environments in
         ``env_ids``.
 
@@ -883,7 +1540,7 @@ class Model:
                 start = e * n_shapes_env
                 end = start + n_shapes_env
 
-                block = self.shape_body[start:end].clone()  # copy this env’s slice
+                block = self.shape_body[start:end].clone()  # copy this env's slice
                 shift = (e - k) * n_links_env  # how far it moves left
                 block -= shift  # re‑index links
 
@@ -994,7 +1651,7 @@ class Model:
             block = self.joint_parent[start:end].clone()
 
             shift = (e - k) * n_links_env  # how much this env moves left
-            mask = block >= 0  # -1 means “root”, keep as is
+            mask = block >= 0  # -1 means "root", keep as is
             block[mask] -= shift
 
             parent_blocks.append(block)
@@ -1364,7 +2021,7 @@ class Model:
         if dr_target_shape is not None and len(dr_target_shape):
             dr_target_shape = torch.as_tensor(dr_target_shape, device=dev, dtype=torch.long)
         else:
-            dr_target_shape = None  # means “all shapes”
+            dr_target_shape = None  # means "all shapes"
 
         # -------- helper --------------------------------------------------
         def _rand_vec(low, high):

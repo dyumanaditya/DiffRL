@@ -168,7 +168,7 @@ class HopperEnv(DFlexEnv):
             )
             env_offset = (0.0, 0.0, i * offset_step)
             self.builder.joint_X_pj[link_start] = df.transform(
-                env_offset,
+                (0.0, 0.0, 0.0),
                 df.quat_from_axis_angle((1.0, 0.0, 0.0), -math.pi * 0.5),
             )
 
@@ -206,6 +206,8 @@ class HopperEnv(DFlexEnv):
 
     def set_act(self, action):
         self.state.joint_act.view(self.num_envs, -1)[:, 3:] = action
+        # self.state.joint_act.view(self.num_envs, -1)[0:1, 3:] = action[0]
+        # self.state.joint_act.view(self.num_envs, -1)[1:2, 3:] = action[0]
 
     def compute_termination(self, obs, act):
         termination = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)

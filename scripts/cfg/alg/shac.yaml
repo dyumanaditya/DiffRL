@@ -27,6 +27,6 @@ grad_norm: 1.0
 critic_grad_norm: 1.0
 save_interval: ${resolve_child:400,${env.shac},save_interval}
 stochastic_eval: False
-eval_runs: 12
+eval_runs: 0
 train: ${general.train}
 device: ${general.device}
