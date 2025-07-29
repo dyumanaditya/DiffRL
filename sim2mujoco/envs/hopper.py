@@ -1,3 +1,4 @@
+import os
 import mujoco
 import torch
 import numpy as np
@@ -9,8 +10,10 @@ class HopperMujocoEnv:
         # Make the env
         # Disable termination from angle limits, because we trained without that
         render_mode = 'human' if render else None
+        xml = os.path.join(os.path.dirname(__file__), 'assets', 'hopper.xml')
         self.env = gym.make(
             'Hopper-v5',
+            # xml_file=xml,
             render_mode=render_mode,
             healthy_angle_range=[-np.inf, np.inf],
             # frame_skip=8
