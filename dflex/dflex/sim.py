@@ -2273,6 +2273,8 @@ def eval_rigid_integrate(
 
 g_state_out = None
 envs_in_contact = None
+num_steps_in_contact = []
+contact_forces = []
 
 
 # define PyTorch autograd op to wrap simulate func
@@ -2320,6 +2322,10 @@ class SimulateFunc(torch.autograd.Function):
         # TODO: Generalize. For hopper, link 5 is foot
         link = 5
         links_in_contact = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
+        
+        # Initialize contact metrics for accumulation across all substeps
+        total_max_contact_force_norm = 0.0
+        total_steps_in_contact = 0
 
         # simulate
         for i in range(substeps):
@@ -2339,12 +2345,26 @@ class SimulateFunc(torch.autograd.Function):
             # Add to links that are in contact with something
             contact_count = state_out.contact_count.view(num_envs, link_count)
             links_in_contact += contact_count[:, link] > 0
+            
+            # Accumulate contact metrics across substeps
+            # Compute max contact force norm from contact forces
+            if hasattr(state_out, 'contact_f') and state_out.contact_f is not None:
+                contact_force_norms = torch.norm(state_out.contact_f[:, 3:], dim=1)  # Only force part (last 3 components)
+                current_max_contact_norm = torch.max(contact_force_norms).item()
+                total_max_contact_force_norm = max(total_max_contact_force_norm, current_max_contact_norm)
+                
+                # Check if there was contact in this substep
+                has_contact = torch.any(contact_count > 0.0).item()
+                if has_contact:
+                    total_steps_in_contact += 1
 
             # swap states
             state_in = state_out
 
         global envs_in_contact
         envs_in_contact = torch.nonzero(links_in_contact).squeeze(1)
+
+
 
         # print("final state")
         # print(state_out.joint_q)
@@ -2499,6 +2519,8 @@ class SemiImplicitIntegrator:
         else:
             global g_state_out
             global envs_in_contact
+            global num_steps_in_contact
+            global contact_forces
 
             # get list of inputs and outputs for PyTorch tensor tracking
             inputs = [*state_in.flatten(), *model.flatten()]
@@ -2534,7 +2556,9 @@ class SemiImplicitIntegrator:
 
             # Check if any envs are in contact with the ground and bundle those for the substeps rollout
             env_ids_in_contact = envs_in_contact.clone()
+            # contact_forces.append(state_out.contact_f.clone()[-1])
             if env_ids_in_contact.numel() > 0:
+                # num_steps_in_contact.append(1)
                 # Run forward simulation for the sub-model
                 if self.bundle_info is not None and self.bundle_info[0]:
                     num_samples = self.bundle_info[4]
@@ -2578,124 +2602,126 @@ class SemiImplicitIntegrator:
                     num_envs_sub = len(env_ids_in_contact)
                     link_count_sub = model_sub.link_count // num_envs_sub if num_envs_sub > 0 else 0
 
-                    # ---------------------------------------------------------------------------
-                    # 1.  Create CUDA streams *once* (do this outside the main simulation loop)
-                    # ---------------------------------------------------------------------------
-                    device = model.adapter  # same device the tensors live on
-                    streams = [torch.cuda.Stream(device=device)  # one stream per Monte‑Carlo sample
-                               for _ in range(num_samples)]
-                    # ---------------------------------------------------------------------------
-
-                    # ---------------------------------------------------------------------------
-                    # 2.  Replace the original “for sample in range(num_samples)” block with this:
-                    # ---------------------------------------------------------------------------
-                    state_out_q = [None] * num_samples  # to collect joint_q  from each stream
-                    state_out_qd = [None] * num_samples  # to collect joint_qd from each stream
-
-                    for sample, stream in enumerate(streams):
-                        with torch.cuda.stream(stream):  # everything in this block runs
-                            # on *stream* (not the default)
-                            s_in = state_in_sub.clone()
-                            s_in.joint_act = bundle_controls[sample]
-
-                            m = model_sub.clone()
-                            m.randomize_contact_params()
-
-                            inputs = [*s_in.flatten(), *m.flatten()]
-
-                            # enqueue the kernels *asynchronously* on this stream
-                            _ = SimulateFunc.apply(
-                                self, m, s_in,
-                                dt, substeps, mass_matrix_freq,
-                                True,  # reset tape inside loop
-                                self.bundle_info,
-                                num_envs_sub, link_count_sub,
-                                *inputs
-                            )
-
-                            # grab the state produced by this launch
-                            state_i = g_state_out
-                            g_state_out = None  # clear for next iteration
-
-                            state_out_q[sample] = state_i.joint_q
-                            state_out_qd[sample] = state_i.joint_qd
-
-                    # ---------------------------------------------------------------------------
-                    # 3.  Wait for *all* streams to finish (one call, no per‑stream waits needed)
-                    # ---------------------------------------------------------------------------
-                    torch.cuda.synchronize(device)  # barrier – all kernels now complete
-
-                    # ---------------------------------------------------------------------------
-                    # 4.  Reduce / average exactly as before
-                    # ---------------------------------------------------------------------------
-                    joint_q = torch.stack(state_out_q, dim=0)  # shape (S, E*dof)
-                    joint_qd = torch.stack(state_out_qd, dim=0)
-
-                    final_joint_q_sub = joint_q.mean(dim=0)  # shape (E*dof)
-                    final_joint_qd_sub = joint_qd.mean(dim=0)
-                    # ---------------------------------------------------------------------------
-
-                    # ---------------------------------------------------------------------------
-                    # 5.  Inject finals back into the full state (unchanged from your code)
-                    # ---------------------------------------------------------------------------
-                    joint_q_full = state_out.joint_q.view(num_envs, -1).clone()
-                    joint_qd_full = state_out.joint_qd.view(num_envs, -1).clone()
-
-                    joint_q_full[env_ids_in_contact] = final_joint_q_sub.view(len(env_ids_in_contact), -1)
-                    joint_qd_full[env_ids_in_contact] = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
-
-                    state_out.joint_q = joint_q_full.view(-1)
-                    state_out.joint_qd = joint_qd_full.view(-1)
-
-                    # for sample in range(num_samples):
-                    #     # clone state to avoid inplace accumulation across samples
-                    #     s_in = state_in_sub.clone()
-                    #     s_in.joint_act = bundle_controls[sample]
+                    # # ---------------------------------------------------------------------------
+                    # # 1.  Create CUDA streams *once* (do this outside the main simulation loop)
+                    # # ---------------------------------------------------------------------------
+                    # device = model.adapter  # same device the tensors live on
+                    # streams = [torch.cuda.Stream(device=device)  # one stream per Monte‑Carlo sample
+                    #            for _ in range(num_samples)]
+                    # # ---------------------------------------------------------------------------
                     #
-                    #     m = model_sub.clone()  # simulate only the sub-model
+                    # # ---------------------------------------------------------------------------
+                    # # 2.  Replace the original "for sample in range(num_samples)" block with this:
+                    # # ---------------------------------------------------------------------------
+                    # state_out_q = [None] * num_samples  # to collect joint_q  from each stream
+                    # state_out_qd = [None] * num_samples  # to collect joint_qd from each stream
                     #
-                    #     # Randomize contact params for bundle
-                    #     m.randomize_contact_params()
+                    # for sample, stream in enumerate(streams):
+                    #     with torch.cuda.stream(stream):  # everything in this block runs
+                    #         # on *stream* (not the default)
+                    #         s_in = state_in_sub.clone()
+                    #         s_in.joint_act = bundle_controls[sample]
                     #
-                    #     inputs = [*s_in.flatten(), *m.flatten()]
+                    #         m = model_sub.clone()
+                    #         m.randomize_contact_params()
                     #
-                    #     tensors = SimulateFunc.apply(
-                    #         self,
-                    #         m,
-                    #         s_in,
-                    #         dt,
-                    #         substeps,
-                    #         mass_matrix_freq,
-                    #         reset_tape,
-                    #         self.bundle_info,
-                    #         num_envs_sub,
-                    #         link_count_sub,
-                    #         *inputs
-                    #     )
+                    #         inputs = [*s_in.flatten(), *m.flatten()]
                     #
-                    #     final_joint_q_sub += g_state_out.joint_q
-                    #     final_joint_qd_sub += g_state_out.joint_qd
-                    #     g_state_out = None  # clear for next sample
-                    #     torch.cuda.empty_cache()
+                    #         # enqueue the kernels *asynchronously* on this stream
+                    #         _ = SimulateFunc.apply(
+                    #             self, m, s_in,
+                    #             dt, substeps, mass_matrix_freq,
+                    #             True,  # reset tape inside loop
+                    #             self.bundle_info,
+                    #             num_envs_sub, link_count_sub,
+                    #             *inputs
+                    #         )
                     #
-                    # # Average the final sub joint_q and joint_qd
-                    # final_joint_q_sub /= num_samples
-                    # final_joint_qd_sub /= num_samples
+                    #         # grab the state produced by this launch
+                    #         state_i = g_state_out
+                    #         g_state_out = None  # clear for next iteration
                     #
-                    # # Replace the envs in contact with new bundled states
-                    # joint_q = state_out.joint_q.view(num_envs, -1).clone()
-                    # joint_qd = state_out.joint_qd.view(num_envs, -1).clone()
+                    #         state_out_q[sample] = state_i.joint_q
+                    #         state_out_qd[sample] = state_i.joint_qd
                     #
-                    # final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
-                    # final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
+                    # # ---------------------------------------------------------------------------
+                    # # 3.  Wait for *all* streams to finish (one call, no per‑stream waits needed)
+                    # # ---------------------------------------------------------------------------
+                    # torch.cuda.synchronize(device)  # barrier – all kernels now complete
                     #
-                    # joint_q[env_ids_in_contact] = final_joint_q_sub
-                    # joint_qd[env_ids_in_contact] = final_joint_qd_sub
+                    # # ---------------------------------------------------------------------------
+                    # # 4.  Reduce / average exactly as before
+                    # # ---------------------------------------------------------------------------
+                    # joint_q = torch.stack(state_out_q, dim=0)  # shape (S, E*dof)
+                    # joint_qd = torch.stack(state_out_qd, dim=0)
                     #
-                    # # Flatten back to original shape
-                    # state_out.joint_q = joint_q.view(-1)
-                    # state_out.joint_qd = joint_qd.view(-1)
+                    # final_joint_q_sub = joint_q.mean(dim=0)  # shape (E*dof)
+                    # final_joint_qd_sub = joint_qd.mean(dim=0)
+                    # # ---------------------------------------------------------------------------
+                    #
+                    # # ---------------------------------------------------------------------------
+                    # # 5.  Inject finals back into the full state (unchanged from your code)
+                    # # ---------------------------------------------------------------------------
+                    # joint_q_full = state_out.joint_q.view(num_envs, -1).clone()
+                    # joint_qd_full = state_out.joint_qd.view(num_envs, -1).clone()
+                    #
+                    # joint_q_full[env_ids_in_contact] = final_joint_q_sub.view(len(env_ids_in_contact), -1)
+                    # joint_qd_full[env_ids_in_contact] = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
+                    #
+                    # state_out.joint_q = joint_q_full.view(-1)
+                    # state_out.joint_qd = joint_qd_full.view(-1)
 
+                    for sample in range(num_samples):
+                        # clone state to avoid inplace accumulation across samples
+                        s_in = state_in_sub.clone()
+                        s_in.joint_act = bundle_controls[sample]
+
+                        m = model_sub.clone()  # simulate only the sub-model
+
+                        # Randomize contact params for bundle
+                        m.randomize_contact_params()
+
+                        inputs = [*s_in.flatten(), *m.flatten()]
+
+                        tensors = SimulateFunc.apply(
+                            self,
+                            m,
+                            s_in,
+                            dt,
+                            substeps,
+                            mass_matrix_freq,
+                            reset_tape,
+                            self.bundle_info,
+                            num_envs_sub,
+                            link_count_sub,
+                            *inputs
+                        )
+
+                        final_joint_q_sub += g_state_out.joint_q
+                        final_joint_qd_sub += g_state_out.joint_qd
+                        g_state_out = None  # clear for next sample
+                        torch.cuda.empty_cache()
+
+                    # Average the final sub joint_q and joint_qd
+                    final_joint_q_sub /= num_samples
+                    final_joint_qd_sub /= num_samples
+
+                    # Replace the envs in contact with new bundled states
+                    joint_q = state_out.joint_q.view(num_envs, -1).clone()
+                    joint_qd = state_out.joint_qd.view(num_envs, -1).clone()
+
+                    final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
+                    final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
+
+                    joint_q[env_ids_in_contact] = final_joint_q_sub
+                    joint_qd[env_ids_in_contact] = final_joint_qd_sub
+
+                    # Flatten back to original shape
+                    state_out.joint_q = joint_q.view(-1)
+                    state_out.joint_qd = joint_qd.view(-1)
+
+            else:
+                num_steps_in_contact.append(0)
             # # global g_state_out
             # state_out = g_state_out
             # g_state_out = None  # null reference
@@ -2703,6 +2729,14 @@ class SemiImplicitIntegrator:
             # print("state_out joint_q", state_out.joint_q)
             # print("state_out joint_qd", state_out.joint_qd)
             # print()
+            # for i, f in zip(num_steps_in_contact, contact_forces):
+            #     print(i)
+            #     print(torch.norm(f[3:]))
+            #     print()
+            # print("len num_steps_in_contact")
+            # print(len(num_steps_in_contact))
+            # # print("contact_forces")
+            # # print(contact_forces)
 
             return state_out
 

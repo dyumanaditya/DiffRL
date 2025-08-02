@@ -249,6 +249,19 @@ class DFlexEnv:
             self.sim_substeps,
             self.MM_caching_frequency,
         )
+        
+        # Compute contact metrics from the final state
+        step_max_contact_force_norm = 0.0
+        step_steps_in_contact = 0
+        
+        if hasattr(next_state, 'contact_f') and next_state.contact_f is not None:
+            # Compute max contact force norm
+            contact_force_norms = torch.norm(next_state.contact_f[:, 3:], dim=1)  # Only force part (last 3 components)
+            step_max_contact_force_norm = torch.max(contact_force_norms).item()
+            
+            # Count steps in contact
+            contact_counts = next_state.contact_count
+            step_steps_in_contact = torch.sum(contact_counts > 0.0).item()
 
         # compute dynamics jacobians if requested
         if self.jacobian and not play:
@@ -306,6 +319,8 @@ class DFlexEnv:
                     "accelerations": self.state.body_a_s.clone()
                     .detach()
                     .view(self.num_envs, -1, 6),
+                    "max_contact_force_norm": torch.tensor(step_max_contact_force_norm, device=self.device),
+                    "steps_in_contact": torch.tensor(step_steps_in_contact, device=self.device),
                 }
             )
 

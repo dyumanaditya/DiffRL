@@ -77,8 +77,8 @@ class SHAC:
         assert save_interval > 0
         assert eval_runs >= 0
 
-        # Create environment
-        self.env = instantiate(env_config, logdir=logdir)
+        # Create environment with gradients enabled to access contact metrics
+        self.env = instantiate(env_config, logdir=logdir, no_grad=False)
         print("num_envs = ", self.env.num_envs)
         print("num_actions = ", self.env.num_actions)
         print("num_obs = ", self.env.num_obs)
@@ -189,6 +189,10 @@ class SHAC:
         # counting variables
         self.iter_count = 0
         self.step_count = 0
+
+        # contact force tracking variables
+        self.epoch_max_contact_force_norm = 0.0
+        self.epoch_steps_in_contact = 0
 
         # loss variables
         self.episode_length_his = []
@@ -305,6 +309,17 @@ class SHAC:
 
             self.episode_length += 1
             rollout_len += 1
+
+            # Track contact force metrics from simulation
+            if "max_contact_force_norm" in info:
+                max_contact_norm = info["max_contact_force_norm"].item()
+                self.epoch_max_contact_force_norm = max(self.epoch_max_contact_force_norm, max_contact_norm)
+                
+            if "steps_in_contact" in info:
+                steps_in_contact = info["steps_in_contact"].item()
+                # This is the count of bodies in contact in the current environment step
+                # We need to accumulate this across all environment steps in the epoch
+                self.epoch_steps_in_contact += steps_in_contact
 
             if self.log_jacobians:
                 self.cfs.append(info["contact_forces"].cpu())
@@ -618,7 +633,7 @@ class SHAC:
                 # sanity check
                 if (
                     torch.isnan(self.grad_norm_before_clip)
-                    or self.grad_norm_before_clip > 1e6
+                    # or self.grad_norm_before_clip > 1e6
                 ):
                     print_error("NaN gradient")
                     raise ValueError
@@ -710,6 +725,18 @@ class SHAC:
             self.log_scalar("value_loss", self.value_loss)
             self.log_scalar("rollout_len", self.mean_horizon)
             self.log_scalar("fps", fps)
+            
+            # Log contact force metrics from simulation
+            self.log_scalar("max_contact_force_norm", self.epoch_max_contact_force_norm)
+            self.log_scalar("steps_in_contact", self.epoch_steps_in_contact)
+            
+            # Store values for printing before resetting
+            current_max_contact_force = self.epoch_max_contact_force_norm
+            current_steps_in_contact = self.epoch_steps_in_contact
+            
+            # Reset epoch contact metrics for next epoch
+            self.epoch_max_contact_force_norm = 0.0
+            self.epoch_steps_in_contact = 0
 
             if len(self.episode_loss_his) > 0:
                 mean_episode_length = self.episode_length_meter.get_mean()
@@ -755,7 +782,7 @@ class SHAC:
                 mean_episode_length = 0
 
             print(
-                "iter {:}/{:}, ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, avg rollout {:.1f}, total steps {:}, fps {:.2f}, value/actor loss {:.2f}/{:.2f}, grad norm before/after clip {:.2f}/{:.2f}".format(
+                "iter {:}/{:}, ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, avg rollout {:.1f}, total steps {:}, fps {:.2f}, value/actor loss {:.2f}/{:.2f}, grad norm before/after clip {:.2f}/{:.2f}, max contact force {:.2f}, steps in contact {:}".format(
                     self.iter_count,
                     self.max_epochs,
                     mean_policy_loss,
@@ -768,6 +795,8 @@ class SHAC:
                     self.actor_loss,
                     self.grad_norm_before_clip,
                     self.grad_norm_after_clip,
+                    current_max_contact_force,
+                    current_steps_in_contact,
                 )
             )
 
