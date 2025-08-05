@@ -69,8 +69,27 @@ class AntEnv(DFlexEnv):
         )
 
         self.early_termination = early_termination
-        self.contact_ke = contact_ke
-        self.contact_kd = contact_kd if contact_kd is not None else contact_ke / 4.0
+        # self.contact_ke = contact_ke
+        # self.contact_kd = contact_kd if contact_kd is not None else contact_ke / 4.0
+
+        # Bundling parameters
+        self.bundle = kwargs.get("bundle", False)
+        if self.bundle:
+            self.bundle_info = (
+                self.bundle,  # enable bundling
+                (("joint_act",), ("joint_q", "joint_qd")),  # what to disturb / what to average
+                [3, 4, 5], None,  # which DOFs inside those tensors to add noise to/average
+                kwargs.get("num_samples"), kwargs.get("sigma"),  # how many Monte-Carlo shots and σ of the noise
+                kwargs.get("bundle_seed", 0),  # seed for the bundle
+                device
+            )
+        else:
+            self.bundle_info = None
+
+        self.contact_ke = kwargs["contact"]["ke"]
+        self.contact_kd = kwargs["contact"]["kd"]
+        self.contact_kf = kwargs["contact"]["kf"]
+        self.contact_mu = kwargs["contact"]["mu"]
 
         self.init_sim()
 
@@ -148,8 +167,8 @@ class AntEnv(DFlexEnv):
                 damping=1.0,
                 contact_ke=self.contact_ke,
                 contact_kd=self.contact_kd,
-                contact_kf=3.0e3,
-                contact_mu=0.75,
+                contact_kf=self.contact_kf,
+                contact_mu=self.contact_mu,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
                 armature=0.05,
@@ -184,7 +203,7 @@ class AntEnv(DFlexEnv):
             (0.0, -9.81, 0.0), dtype=torch.float32, device=self.device
         )
 
-        self.integrator = df.sim.SemiImplicitIntegrator()
+        self.integrator = df.sim.SemiImplicitIntegrator(bundle_info=self.bundle_info)
 
         self.state = self.model.state()
 
