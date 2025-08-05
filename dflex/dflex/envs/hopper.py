@@ -106,6 +106,9 @@ class HopperEnv(DFlexEnv):
         self.action_penalty = action_penalty
         self.action_strength = 200.0
 
+        # bodies that are in contact with the ground
+        self.bodies_in_contact = [5]  # foot of the hopper
+
         # TODO logdir shouldn't need to be passed in here
         self.setup_visualizer(logdir)
 

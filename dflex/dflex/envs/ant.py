@@ -79,6 +79,9 @@ class AntEnv(DFlexEnv):
         self.up_rew_scale =up_rew_scale
         self.action_strength = 200.0
 
+        # bodies that are in contact with the ground
+        self.bodies_in_contact = [2, 4, 6, 8]  # legs of the ant
+
         self.setup_visualizer(logdir)
 
     def init_sim(self):

@@ -2301,6 +2301,7 @@ class SimulateFunc(torch.autograd.Function):
         bundle_info,
         num_envs,
         link_count,
+        bodies_in_contact,
         *tensors
     ):
         """
@@ -2319,9 +2320,7 @@ class SimulateFunc(torch.autograd.Function):
         actuation = state_in.joint_act
 
         # Collect contact data to determine which links were in contact with the ground
-        # TODO: Generalize. For hopper, link 5 is foot
-        link = 5
-        links_in_contact = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
+        in_contact = torch.zeros(num_envs, dtype=torch.int, device=actuation.device)
         
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
@@ -2344,8 +2343,15 @@ class SimulateFunc(torch.autograd.Function):
 
             # Add to links that are in contact with something
             contact_count = state_out.contact_count.view(num_envs, link_count)
-            links_in_contact += contact_count[:, link] > 0
-            
+
+            hits = contact_count[:, bodies_in_contact] > 0
+            n_hits = hits.any(dim=1)
+            in_contact |= n_hits
+
+            # print("hits", n_hits)
+            # print("links_in_contact", in_contact)
+            # print()
+
             # Accumulate contact metrics across substeps
             # Compute max contact force norm from contact forces
             if hasattr(state_out, 'contact_f') and state_out.contact_f is not None:
@@ -2362,9 +2368,7 @@ class SimulateFunc(torch.autograd.Function):
             state_in = state_out
 
         global envs_in_contact
-        envs_in_contact = torch.nonzero(links_in_contact).squeeze(1)
-
-
+        envs_in_contact = torch.nonzero(in_contact).squeeze(1)
 
         # print("final state")
         # print(state_out.joint_q)
@@ -2440,7 +2444,7 @@ class SimulateFunc(torch.autograd.Function):
 
         # filter grads to replace empty tensors / no grad / constant params with None
         # NOTE: Each none below is for each input parameter of forward!
-        return (None, None, None, None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
+        return (None, None, None, None, None, None, None, None, None, None, None, *df.filter_grads(adj_inputs))
 
 
 class SemiImplicitIntegrator:
@@ -2483,6 +2487,7 @@ class SemiImplicitIntegrator:
         substeps: int,
         mass_matrix_freq: int,
         reset_tape: bool = True,
+        bodies_in_contact: list = None
     ) -> State:
         """Performs a single integration step forward in time
 
@@ -2548,6 +2553,7 @@ class SemiImplicitIntegrator:
                 self.bundle_info,
                 num_envs,
                 link_count,
+                bodies_in_contact,
                 *inputs
             )
 

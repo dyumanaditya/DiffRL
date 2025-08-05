@@ -138,6 +138,8 @@ class DFlexEnv:
         else:
             self.dr_params = None
 
+        self.bodies_in_contact = []
+
     @abstractmethod
     def observation_from_state(self, state):
         pass
@@ -341,6 +343,7 @@ class DFlexEnv:
             self.sim_dt,
             self.sim_substeps,
             self.MM_caching_frequency,
+            bodies_in_contact=self.bodies_in_contact,
         )
         
         # Compute contact metrics from the final state
