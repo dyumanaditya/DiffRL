@@ -47,6 +47,7 @@ class AntEnv(DFlexEnv):
         action_penalty=0.0,
         joint_vel_obs_scaling=0.1,
         up_rew_scale=0.1,
+        **kwargs
     ):
         num_obs = 37
         num_act = 8
@@ -64,6 +65,7 @@ class AntEnv(DFlexEnv):
             stochastic_init,
             jacobian,
             device,
+            **kwargs
         )
 
         self.early_termination = early_termination
