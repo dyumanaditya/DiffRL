@@ -14,6 +14,18 @@ config:
   joint_vel_obs_scaling: 0.1
   up_rew_scale: 0.1
 
+  # Bundling
+  bundle: False
+  num_samples: 10
+  sigma: 10.0
+  bundle_seed: 0
+
+  contact:
+    ke: 4e4  # Nominal stiffness for elastic contact
+    kd: 1e4  # Nominal damping for elastic contact
+    kf: 3e3  # Nominal friction for elastic contact
+    mu: 0.75  # Nominal friction coefficient for elastic contact
+
 shac:
   actor_lr: 2e-3
   critic_lr: 5e-4
