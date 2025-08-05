@@ -889,7 +889,8 @@ class AHAC:
 
     def log_scalar(self, scalar, value):
         """Helper method for consistent logging"""
-        self.writer.add_scalar(f"{scalar}", value, self.iter_count)
+        # self.writer.add_scalar(f"{scalar}", value, self.iter_count)
+        self.writer.add_scalar(f"{scalar}", value, self.step_count)
 
     def close(self):
         self.writer.close()
