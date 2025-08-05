@@ -48,19 +48,19 @@ from copy import deepcopy
 kernels = None
 
 
-# @df.func
-# def test(c: float):
-#     x = 1.0
-#     y = float(2)
-#     z = int(3.0)
-# 
-#     print(y)
-#     print(z)
-# 
-#     if c < 3.0:
-#         x = 2.0
-# 
-#     return x * 6.0
+@df.func
+def test(c: float):
+    x = 1.0
+    y = float(2)
+    z = int(3.0)
+
+    print(y)
+    print(z)
+
+    if c < 3.0:
+        x = 2.0
+
+    return x * 6.0
 
 
 def kernel_init():
@@ -70,14 +70,14 @@ def kernel_init():
 
 @df.kernel
 def integrate_particles(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    f: df.tensor(df.float3),
-    w: df.tensor(float),
-    gravity: df.tensor(df.float3),
-    dt: float,
-    x_new: df.tensor(df.float3),
-    v_new: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        f: df.tensor(df.float3),
+        w: df.tensor(float),
+        gravity: df.tensor(df.float3),
+        dt: float,
+        x_new: df.tensor(df.float3),
+        v_new: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -99,20 +99,20 @@ def integrate_particles(
 # semi-implicit Euler integration
 @df.kernel
 def integrate_rigids(
-    rigid_x: df.tensor(df.float3),
-    rigid_r: df.tensor(df.quat),
-    rigid_v: df.tensor(df.float3),
-    rigid_w: df.tensor(df.float3),
-    rigid_f: df.tensor(df.float3),
-    rigid_t: df.tensor(df.float3),
-    inv_m: df.tensor(float),
-    inv_I: df.tensor(df.mat33),
-    gravity: df.tensor(df.float3),
-    dt: float,
-    rigid_x_new: df.tensor(df.float3),
-    rigid_r_new: df.tensor(df.quat),
-    rigid_v_new: df.tensor(df.float3),
-    rigid_w_new: df.tensor(df.float3),
+        rigid_x: df.tensor(df.float3),
+        rigid_r: df.tensor(df.quat),
+        rigid_v: df.tensor(df.float3),
+        rigid_w: df.tensor(df.float3),
+        rigid_f: df.tensor(df.float3),
+        rigid_t: df.tensor(df.float3),
+        inv_m: df.tensor(float),
+        inv_I: df.tensor(df.mat33),
+        gravity: df.tensor(df.float3),
+        dt: float,
+        rigid_x_new: df.tensor(df.float3),
+        rigid_r_new: df.tensor(df.quat),
+        rigid_v_new: df.tensor(df.float3),
+        rigid_w_new: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -136,7 +136,7 @@ def integrate_rigids(
 
     # linear part
     v1 = (
-        v0 + (f0 * inv_mass + g * df.nonzero(inv_mass)) * dt
+            v0 + (f0 * inv_mass + g * df.nonzero(inv_mass)) * dt
     )  # linear integral (linear position/velocity)
     x1 = x0 + v1 * dt
 
@@ -164,13 +164,13 @@ def integrate_rigids(
 
 @df.kernel
 def eval_springs(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    spring_indices: df.tensor(int),
-    spring_rest_lengths: df.tensor(float),
-    spring_stiffness: df.tensor(float),
-    spring_damping: df.tensor(float),
-    f: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        spring_indices: df.tensor(int),
+        spring_rest_lengths: df.tensor(float),
+        spring_stiffness: df.tensor(float),
+        spring_damping: df.tensor(float),
+        f: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -208,17 +208,17 @@ def eval_springs(
 
 @df.kernel
 def eval_triangles(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    indices: df.tensor(int),
-    pose: df.tensor(df.mat22),
-    activation: df.tensor(float),
-    k_mu: float,
-    k_lambda: float,
-    k_damp: float,
-    k_drag: float,
-    k_lift: float,
-    f: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        indices: df.tensor(int),
+        pose: df.tensor(df.mat22),
+        activation: df.tensor(float),
+        k_mu: float,
+        k_lambda: float,
+        k_damp: float,
+        k_drag: float,
+        k_lift: float,
+        f: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -327,7 +327,7 @@ def eval_triangles(
 
     f_drag = vmid * (k_drag * area * df.abs(df.dot(n, vmid)))
     f_lift = (
-        n * (k_lift * area * (1.57079 - df.acos(df.dot(n, vdir)))) * dot(vmid, vmid)
+            n * (k_lift * area * (1.57079 - df.acos(df.dot(n, vdir)))) * dot(vmid, vmid)
     )
 
     # note reversed sign due to atomic_add below.. need to write the unary op -
@@ -343,7 +343,7 @@ def eval_triangles(
 
 @df.func
 def triangle_closest_point_barycentric(
-    a: df.float3, b: df.float3, c: df.float3, p: df.float3
+        a: df.float3, b: df.float3, c: df.float3, p: df.float3
 ):
     ab = b - a
     ac = c - a
@@ -393,19 +393,19 @@ def triangle_closest_point_barycentric(
 
 @df.kernel
 def eval_triangles_contact(
-    # idx : df.tensor(int), # list of indices for colliding particles
-    num_particles: int,  # size of particles
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    indices: df.tensor(int),
-    pose: df.tensor(df.mat22),
-    activation: df.tensor(float),
-    k_mu: float,
-    k_lambda: float,
-    k_damp: float,
-    k_drag: float,
-    k_lift: float,
-    f: df.tensor(df.float3),
+        # idx : df.tensor(int), # list of indices for colliding particles
+        num_particles: int,  # size of particles
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        indices: df.tensor(int),
+        pose: df.tensor(df.mat22),
+        activation: df.tensor(float),
+        k_mu: float,
+        k_lambda: float,
+        k_damp: float,
+        k_drag: float,
+        k_lift: float,
+        f: df.tensor(df.float3),
 ):
     tid = df.tid()
     face_no = tid // num_particles  # which face
@@ -453,22 +453,22 @@ def eval_triangles_contact(
 
 @df.kernel
 def eval_triangles_rigid_contacts(
-    num_particles: int,  # number of particles (size of contact_point)
-    x: df.tensor(df.float3),  # position of particles
-    v: df.tensor(df.float3),
-    indices: df.tensor(int),  # triangle indices
-    rigid_x: df.tensor(df.float3),  # rigid body positions
-    rigid_r: df.tensor(df.quat),
-    rigid_v: df.tensor(df.float3),
-    rigid_w: df.tensor(df.float3),
-    contact_body: df.tensor(int),
-    contact_point: df.tensor(df.float3),  # position of contact points relative to body
-    contact_dist: df.tensor(float),
-    contact_mat: df.tensor(int),
-    materials: df.tensor(float),
-    #   rigid_f : df.tensor(df.float3),
-    #   rigid_t : df.tensor(df.float3),
-    tri_f: df.tensor(df.float3),
+        num_particles: int,  # number of particles (size of contact_point)
+        x: df.tensor(df.float3),  # position of particles
+        v: df.tensor(df.float3),
+        indices: df.tensor(int),  # triangle indices
+        rigid_x: df.tensor(df.float3),  # rigid body positions
+        rigid_r: df.tensor(df.quat),
+        rigid_v: df.tensor(df.float3),
+        rigid_w: df.tensor(df.float3),
+        contact_body: df.tensor(int),
+        contact_point: df.tensor(df.float3),  # position of contact points relative to body
+        contact_dist: df.tensor(float),
+        contact_mat: df.tensor(int),
+        materials: df.tensor(float),
+        #   rigid_f : df.tensor(df.float3),
+        #   rigid_t : df.tensor(df.float3),
+        tri_f: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -502,7 +502,7 @@ def eval_triangles_rigid_contacts(
     r = pos - x0  # basically just c_point in the new coordinates
     rhat = df.normalize(r)
     pos = (
-        pos + rhat * c_dist
+            pos + rhat * c_dist
     )  # add on 'thickness' of shape, e.g.: radius of sphere/capsule
 
     # contact point velocity
@@ -537,11 +537,11 @@ def eval_triangles_rigid_contacts(
     # df.atomic_sub(tri_f, particle_no, fn)
 
     fn = (
-        c * ke
+            c * ke
     )  # normal force (restitution coefficient * how far inside for ground) (negative)
 
     vtri = (
-        vp * bary[0] + vq * bary[1] + vr * bary[2]
+            vp * bary[0] + vq * bary[1] + vr * bary[2]
     )  # bad approximation for centroid velocity
     vrel = vtri - dpdt
 
@@ -578,13 +578,13 @@ def eval_triangles_rigid_contacts(
 
 @df.kernel
 def eval_bending(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    indices: df.tensor(int),
-    rest: df.tensor(float),
-    ke: float,
-    kd: float,
-    f: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        indices: df.tensor(int),
+        rest: df.tensor(float),
+        ke: float,
+        kd: float,
+        f: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -648,13 +648,13 @@ def eval_bending(
 
 @df.kernel
 def eval_tetrahedra(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    indices: df.tensor(int),
-    pose: df.tensor(df.mat33),
-    activation: df.tensor(float),
-    materials: df.tensor(float),
-    f: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        indices: df.tensor(int),
+        pose: df.tensor(df.mat33),
+        activation: df.tensor(float),
+        materials: df.tensor(float),
+        f: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -782,13 +782,13 @@ def eval_tetrahedra(
 
 @df.kernel
 def eval_contacts(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    ke: float,
-    kd: float,
-    kf: float,
-    mu: float,
-    f: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        ke: float,
+        kd: float,
+        kf: float,
+        mu: float,
+        f: df.tensor(df.float3),
 ):
     tid = (
         df.tid()
@@ -909,24 +909,24 @@ def capsule_sdf_grad(radius: float, half_width: float, p: df.float3):
 
 @df.kernel
 def eval_soft_contacts(
-    num_particles: int,
-    particle_x: df.tensor(df.float3),
-    particle_v: df.tensor(df.float3),
-    body_X_sc: df.tensor(df.spatial_transform),
-    body_v_sc: df.tensor(df.spatial_vector),
-    shape_X_co: df.tensor(df.spatial_transform),
-    shape_body: df.tensor(int),
-    shape_geo_type: df.tensor(int),
-    shape_geo_src: df.tensor(int),
-    shape_geo_scale: df.tensor(df.float3),
-    shape_materials: df.tensor(float),
-    ke: float,
-    kd: float,
-    kf: float,
-    mu: float,
-    # outputs
-    particle_f: df.tensor(df.float3),
-    body_f: df.tensor(df.spatial_vector),
+        num_particles: int,
+        particle_x: df.tensor(df.float3),
+        particle_v: df.tensor(df.float3),
+        body_X_sc: df.tensor(df.spatial_transform),
+        body_v_sc: df.tensor(df.spatial_vector),
+        shape_X_co: df.tensor(df.spatial_transform),
+        shape_body: df.tensor(int),
+        shape_geo_type: df.tensor(int),
+        shape_geo_src: df.tensor(int),
+        shape_geo_scale: df.tensor(df.float3),
+        shape_materials: df.tensor(float),
+        ke: float,
+        kd: float,
+        kf: float,
+        mu: float,
+        # outputs
+        particle_f: df.tensor(df.float3),
+        body_f: df.tensor(df.spatial_vector),
 ):
     tid = df.tid()
 
@@ -1042,17 +1042,17 @@ def eval_soft_contacts(
 
 @df.kernel
 def eval_rigid_contacts(
-    rigid_x: df.tensor(df.float3),
-    rigid_r: df.tensor(df.quat),
-    rigid_v: df.tensor(df.float3),
-    rigid_w: df.tensor(df.float3),
-    contact_body: df.tensor(int),
-    contact_point: df.tensor(df.float3),
-    contact_dist: df.tensor(float),
-    contact_mat: df.tensor(int),
-    materials: df.tensor(float),
-    rigid_f: df.tensor(df.float3),
-    rigid_t: df.tensor(df.float3),
+        rigid_x: df.tensor(df.float3),
+        rigid_r: df.tensor(df.quat),
+        rigid_v: df.tensor(df.float3),
+        rigid_w: df.tensor(df.float3),
+        contact_body: df.tensor(int),
+        contact_point: df.tensor(df.float3),
+        contact_dist: df.tensor(float),
+        contact_mat: df.tensor(int),
+        materials: df.tensor(float),
+        rigid_f: df.tensor(df.float3),
+        rigid_t: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -1077,7 +1077,7 @@ def eval_rigid_contacts(
 
     # transform point to world space
     p = (
-        x0 + df.rotate(r0, c_point) - n * c_dist
+            x0 + df.rotate(r0, c_point) - n * c_dist
     )  # add on 'thickness' of shape, e.g.: radius of sphere/capsule
     # use x0 as center, everything is offset from center of mass
 
@@ -1182,15 +1182,15 @@ def spatial_transform_inertia(t: df.spatial_transform, I: df.spatial_matrix):
 
 @df.kernel
 def eval_rigid_contacts_art(
-    body_X_s: df.tensor(df.spatial_transform),  # position of colliding body
-    body_v_s: df.tensor(df.spatial_vector),  # orientation of colliding body
-    contact_body: df.tensor(int),
-    contact_point: df.tensor(df.float3),
-    contact_dist: df.tensor(float),
-    contact_mat: df.tensor(int),
-    materials: df.tensor(float),
-    body_f_s: df.tensor(df.spatial_vector),  # output
-    contact_count: df.tensor(float),  # output
+        body_X_s: df.tensor(df.spatial_transform),  # position of colliding body
+        body_v_s: df.tensor(df.spatial_vector),  # orientation of colliding body
+        contact_body: df.tensor(int),
+        contact_point: df.tensor(df.float3),
+        contact_dist: df.tensor(float),
+        contact_mat: df.tensor(int),
+        materials: df.tensor(float),
+        body_f_s: df.tensor(df.spatial_vector),  # output
+        contact_count: df.tensor(float),  # output
 ):
     tid = df.tid()
 
@@ -1212,7 +1212,7 @@ def eval_rigid_contacts_art(
 
     # transform point to world space
     p = (
-        df.spatial_transform_point(X_s, c_point) - n * c_dist
+            df.spatial_transform_point(X_s, c_point) - n * c_dist
     )  # add on 'thickness' of shape, e.g.: radius of sphere/capsule
 
     w = df.spatial_top(v_s)
@@ -1258,13 +1258,13 @@ def eval_rigid_contacts_art(
 
 @df.func
 def compute_muscle_force(
-    i: int,
-    body_X_s: df.tensor(df.spatial_transform),
-    body_v_s: df.tensor(df.spatial_vector),
-    muscle_links: df.tensor(int),
-    muscle_points: df.tensor(df.float3),
-    muscle_activation: float,
-    body_f_s: df.tensor(df.spatial_vector),
+        i: int,
+        body_X_s: df.tensor(df.spatial_transform),
+        body_v_s: df.tensor(df.spatial_vector),
+        muscle_links: df.tensor(int),
+        muscle_points: df.tensor(df.float3),
+        muscle_activation: float,
+        body_f_s: df.tensor(df.spatial_vector),
 ):
     link_0 = df.load(muscle_links, i)
     link_1 = df.load(muscle_links, i + 1)
@@ -1294,15 +1294,15 @@ def compute_muscle_force(
 
 @df.kernel
 def eval_muscles(
-    body_X_s: df.tensor(df.spatial_transform),
-    body_v_s: df.tensor(df.spatial_vector),
-    muscle_start: df.tensor(int),
-    muscle_params: df.tensor(float),
-    muscle_links: df.tensor(int),
-    muscle_points: df.tensor(df.float3),
-    muscle_activation: df.tensor(float),
-    # output
-    body_f_s: df.tensor(df.spatial_vector),
+        body_X_s: df.tensor(df.spatial_transform),
+        body_v_s: df.tensor(df.spatial_vector),
+        muscle_start: df.tensor(int),
+        muscle_params: df.tensor(float),
+        muscle_links: df.tensor(int),
+        muscle_points: df.tensor(df.float3),
+        muscle_activation: df.tensor(float),
+        # output
+        body_f_s: df.tensor(df.spatial_vector),
 ):
     tid = df.tid()
 
@@ -1368,12 +1368,12 @@ def jcalc_transform(type: int, axis: df.float3, joint_q: df.tensor(float), start
 # compute motion subspace and velocity for a joint
 @df.func
 def jcalc_motion(
-    type: int,
-    axis: df.float3,
-    X_sc: df.spatial_transform,
-    joint_S_s: df.tensor(df.spatial_vector),
-    joint_qd: df.tensor(float),
-    joint_start: int,
+        type: int,
+        axis: df.float3,
+        X_sc: df.spatial_transform,
+        joint_S_s: df.tensor(df.spatial_vector),
+        joint_qd: df.tensor(float),
+        joint_start: int,
 ):
     # prismatic
     if type == 0:
@@ -1494,22 +1494,22 @@ def jcalc_motion(
 # computes joint space forces/torques in tau
 @df.func
 def jcalc_tau(
-    type: int,
-    target_k_e: float,
-    target_k_d: float,
-    limit_k_e: float,
-    limit_k_d: float,
-    joint_S_s: df.tensor(spatial_vector),
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_act: df.tensor(float),
-    joint_target: df.tensor(float),
-    joint_limit_lower: df.tensor(float),
-    joint_limit_upper: df.tensor(float),
-    coord_start: int,
-    dof_start: int,
-    body_f_s: spatial_vector,
-    tau: df.tensor(float),
+        type: int,
+        target_k_e: float,
+        target_k_d: float,
+        limit_k_e: float,
+        limit_k_d: float,
+        joint_S_s: df.tensor(spatial_vector),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_act: df.tensor(float),
+        joint_target: df.tensor(float),
+        joint_limit_lower: df.tensor(float),
+        joint_limit_upper: df.tensor(float),
+        coord_start: int,
+        dof_start: int,
+        body_f_s: spatial_vector,
+        tau: df.tensor(float),
 ):
     # prismatic / revolute
     if type == 0 or type == 1:
@@ -1536,13 +1536,13 @@ def jcalc_tau(
 
         # total torque / force on the joint
         t = (
-            0.0
-            - spatial_dot(S_s, body_f_s)
-            - target_k_e * (q - target)
-            - target_k_d * qd
-            + act
-            + limit_f
-            + damping_f
+                0.0
+                - spatial_dot(S_s, body_f_s)
+                - target_k_e * (q - target)
+                - target_k_d * qd
+                + act
+                + limit_f
+                + damping_f
         )
 
         df.store(tau, dof_start, t)
@@ -1591,15 +1591,15 @@ def jcalc_tau(
 
 @df.func
 def jcalc_integrate(
-    type: int,
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_qdd: df.tensor(float),
-    coord_start: int,
-    dof_start: int,
-    dt: float,
-    joint_q_new: df.tensor(float),
-    joint_qd_new: df.tensor(float),
+        type: int,
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_qdd: df.tensor(float),
+        coord_start: int,
+        dof_start: int,
+        dt: float,
+        joint_q_new: df.tensor(float),
+        joint_qd_new: df.tensor(float),
 ):
     # prismatic / revolute
     if type == 0 or type == 1:
@@ -1740,17 +1740,17 @@ def jcalc_integrate(
 
 @df.func
 def compute_link_transform(
-    i: int,
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_X_pj: df.tensor(df.spatial_transform),
-    joint_X_cm: df.tensor(df.spatial_transform),
-    joint_axis: df.tensor(df.float3),
-    body_X_sc: df.tensor(df.spatial_transform),
-    body_X_sm: df.tensor(df.spatial_transform),
+        i: int,
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_X_pj: df.tensor(df.spatial_transform),
+        joint_X_cm: df.tensor(df.spatial_transform),
+        joint_axis: df.tensor(df.float3),
+        body_X_sc: df.tensor(df.spatial_transform),
+        body_X_sm: df.tensor(df.spatial_transform),
 ):
     # parent transform
     parent = load(joint_parent, i)
@@ -1784,17 +1784,17 @@ def compute_link_transform(
 
 @df.kernel
 def eval_rigid_fk(
-    articulation_start: df.tensor(int),
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_X_pj: df.tensor(df.spatial_transform),
-    joint_X_cm: df.tensor(df.spatial_transform),
-    joint_axis: df.tensor(df.float3),
-    body_X_sc: df.tensor(df.spatial_transform),
-    body_X_sm: df.tensor(df.spatial_transform),
+        articulation_start: df.tensor(int),
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_X_pj: df.tensor(df.spatial_transform),
+        joint_X_cm: df.tensor(df.spatial_transform),
+        joint_axis: df.tensor(df.float3),
+        body_X_sc: df.tensor(df.spatial_transform),
+        body_X_sm: df.tensor(df.spatial_transform),
 ):
     # one thread per-articulation
     index = tid()
@@ -1820,23 +1820,23 @@ def eval_rigid_fk(
 
 @df.func
 def compute_link_velocity(
-    i: int,
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_qd: df.tensor(float),
-    joint_axis: df.tensor(df.float3),
-    body_I_m: df.tensor(df.spatial_matrix),
-    body_X_sc: df.tensor(df.spatial_transform),
-    body_X_sm: df.tensor(df.spatial_transform),
-    joint_X_pj: df.tensor(df.spatial_transform),
-    gravity: df.tensor(df.float3),
-    # outputs
-    joint_S_s: df.tensor(df.spatial_vector),
-    body_I_s: df.tensor(df.spatial_matrix),
-    body_v_s: df.tensor(df.spatial_vector),
-    body_f_s: df.tensor(df.spatial_vector),
-    body_a_s: df.tensor(df.spatial_vector),
+        i: int,
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_qd: df.tensor(float),
+        joint_axis: df.tensor(df.float3),
+        body_I_m: df.tensor(df.spatial_matrix),
+        body_X_sc: df.tensor(df.spatial_transform),
+        body_X_sm: df.tensor(df.spatial_transform),
+        joint_X_pj: df.tensor(df.spatial_transform),
+        gravity: df.tensor(df.float3),
+        # outputs
+        joint_S_s: df.tensor(df.spatial_vector),
+        body_I_s: df.tensor(df.spatial_matrix),
+        body_v_s: df.tensor(df.spatial_vector),
+        body_f_s: df.tensor(df.spatial_vector),
+        body_a_s: df.tensor(df.spatial_vector),
 ):
     type = df.load(joint_type, i)
     axis = df.load(joint_axis, i)
@@ -1902,27 +1902,27 @@ def compute_link_velocity(
 
 @df.func
 def compute_link_tau(
-    offset: int,
-    joint_end: int,
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_act: df.tensor(float),
-    joint_target: df.tensor(float),
-    joint_target_ke: df.tensor(float),
-    joint_target_kd: df.tensor(float),
-    joint_limit_lower: df.tensor(float),
-    joint_limit_upper: df.tensor(float),
-    joint_limit_ke: df.tensor(float),
-    joint_limit_kd: df.tensor(float),
-    joint_S_s: df.tensor(df.spatial_vector),
-    body_fb_s: df.tensor(df.spatial_vector),
-    # outputs
-    body_ft_s: df.tensor(df.spatial_vector),
-    tau: df.tensor(float),
+        offset: int,
+        joint_end: int,
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_act: df.tensor(float),
+        joint_target: df.tensor(float),
+        joint_target_ke: df.tensor(float),
+        joint_target_kd: df.tensor(float),
+        joint_limit_lower: df.tensor(float),
+        joint_limit_upper: df.tensor(float),
+        joint_limit_ke: df.tensor(float),
+        joint_limit_kd: df.tensor(float),
+        joint_S_s: df.tensor(df.spatial_vector),
+        body_fb_s: df.tensor(df.spatial_vector),
+        # outputs
+        body_ft_s: df.tensor(df.spatial_vector),
+        tau: df.tensor(float),
 ):
     # for backwards traversal
     i = joint_end - offset - 1
@@ -1973,27 +1973,27 @@ def compute_link_tau(
 
 @df.kernel
 def eval_rigid_id(
-    articulation_start: df.tensor(int),
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_axis: df.tensor(df.float3),
-    joint_target_ke: df.tensor(float),
-    joint_target_kd: df.tensor(float),
-    body_I_m: df.tensor(df.spatial_matrix),
-    body_X_sc: df.tensor(df.spatial_transform),
-    body_X_sm: df.tensor(df.spatial_transform),
-    joint_X_pj: df.tensor(df.spatial_transform),
-    gravity: df.tensor(df.float3),
-    # outputs
-    joint_S_s: df.tensor(df.spatial_vector),
-    body_I_s: df.tensor(df.spatial_matrix),
-    body_v_s: df.tensor(df.spatial_vector),
-    body_f_s: df.tensor(df.spatial_vector),
-    body_a_s: df.tensor(df.spatial_vector),
+        articulation_start: df.tensor(int),
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_axis: df.tensor(df.float3),
+        joint_target_ke: df.tensor(float),
+        joint_target_kd: df.tensor(float),
+        body_I_m: df.tensor(df.spatial_matrix),
+        body_X_sc: df.tensor(df.spatial_transform),
+        body_X_sm: df.tensor(df.spatial_transform),
+        joint_X_pj: df.tensor(df.spatial_transform),
+        gravity: df.tensor(df.float3),
+        # outputs
+        joint_S_s: df.tensor(df.spatial_vector),
+        body_I_s: df.tensor(df.spatial_matrix),
+        body_v_s: df.tensor(df.spatial_vector),
+        body_f_s: df.tensor(df.spatial_vector),
+        body_a_s: df.tensor(df.spatial_vector),
 ):
     # one thread per-articulation
     index = tid()
@@ -2026,27 +2026,27 @@ def eval_rigid_id(
 
 @df.kernel
 def eval_rigid_tau(
-    articulation_start: df.tensor(int),
-    joint_type: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_act: df.tensor(float),
-    joint_target: df.tensor(float),
-    joint_target_ke: df.tensor(float),
-    joint_target_kd: df.tensor(float),
-    joint_limit_lower: df.tensor(float),
-    joint_limit_upper: df.tensor(float),
-    joint_limit_ke: df.tensor(float),
-    joint_limit_kd: df.tensor(float),
-    joint_axis: df.tensor(df.float3),
-    joint_S_s: df.tensor(df.spatial_vector),
-    body_fb_s: df.tensor(df.spatial_vector),
-    # outputs
-    body_ft_s: df.tensor(df.spatial_vector),
-    tau: df.tensor(float),
+        articulation_start: df.tensor(int),
+        joint_type: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_act: df.tensor(float),
+        joint_target: df.tensor(float),
+        joint_target_ke: df.tensor(float),
+        joint_target_kd: df.tensor(float),
+        joint_limit_lower: df.tensor(float),
+        joint_limit_upper: df.tensor(float),
+        joint_limit_ke: df.tensor(float),
+        joint_limit_kd: df.tensor(float),
+        joint_axis: df.tensor(df.float3),
+        joint_S_s: df.tensor(df.spatial_vector),
+        body_fb_s: df.tensor(df.spatial_vector),
+        # outputs
+        body_ft_s: df.tensor(df.spatial_vector),
+        tau: df.tensor(float),
 ):
     # one thread per-articulation
     index = tid()
@@ -2083,13 +2083,13 @@ def eval_rigid_tau(
 
 @df.kernel
 def eval_rigid_jacobian(
-    articulation_start: df.tensor(int),
-    articulation_J_start: df.tensor(int),
-    joint_parent: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_S_s: df.tensor(spatial_vector),
-    # outputs
-    J: df.tensor(float),
+        articulation_start: df.tensor(int),
+        articulation_J_start: df.tensor(int),
+        joint_parent: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_S_s: df.tensor(spatial_vector),
+        # outputs
+        J: df.tensor(float),
 ):
     # one thread per-articulation
     index = tid()
@@ -2133,11 +2133,11 @@ def eval_rigid_jacobian(
 
 @df.kernel
 def eval_rigid_mass(
-    articulation_start: df.tensor(int),
-    articulation_M_start: df.tensor(int),
-    body_I_s: df.tensor(spatial_matrix),
-    # outputs
-    M: df.tensor(float),
+        articulation_start: df.tensor(int),
+        articulation_M_start: df.tensor(int),
+        body_I_s: df.tensor(spatial_matrix),
+        # outputs
+        M: df.tensor(float),
 ):
     # one thread per-articulation
     index = tid()
@@ -2154,56 +2154,56 @@ def eval_rigid_mass(
 
 @df.kernel
 def eval_dense_gemm(
-    m: int,
-    n: int,
-    p: int,
-    t1: int,
-    t2: int,
-    A: df.tensor(float),
-    B: df.tensor(float),
-    C: df.tensor(float),
+        m: int,
+        n: int,
+        p: int,
+        t1: int,
+        t2: int,
+        A: df.tensor(float),
+        B: df.tensor(float),
+        C: df.tensor(float),
 ):
     dense_gemm(m, n, p, t1, t2, A, B, C)
 
 
 @df.kernel
 def eval_dense_gemm_batched(
-    m: df.tensor(int),
-    n: df.tensor(int),
-    p: df.tensor(int),
-    t1: int,
-    t2: int,
-    A_start: df.tensor(int),
-    B_start: df.tensor(int),
-    C_start: df.tensor(int),
-    A: df.tensor(float),
-    B: df.tensor(float),
-    C: df.tensor(float),
+        m: df.tensor(int),
+        n: df.tensor(int),
+        p: df.tensor(int),
+        t1: int,
+        t2: int,
+        A_start: df.tensor(int),
+        B_start: df.tensor(int),
+        C_start: df.tensor(int),
+        A: df.tensor(float),
+        B: df.tensor(float),
+        C: df.tensor(float),
 ):
     dense_gemm_batched(m, n, p, t1, t2, A_start, B_start, C_start, A, B, C)
 
 
 @df.kernel
 def eval_dense_cholesky(
-    n: int, A: df.tensor(float), regularization: df.tensor(float), L: df.tensor(float)
+        n: int, A: df.tensor(float), regularization: df.tensor(float), L: df.tensor(float)
 ):
     dense_chol(n, A, regularization, L)
 
 
 @df.kernel
 def eval_dense_cholesky_batched(
-    A_start: df.tensor(int),
-    A_dim: df.tensor(int),
-    A: df.tensor(float),
-    regularization: df.tensor(float),
-    L: df.tensor(float),
+        A_start: df.tensor(int),
+        A_dim: df.tensor(int),
+        A: df.tensor(float),
+        regularization: df.tensor(float),
+        L: df.tensor(float),
 ):
     dense_chol_batched(A_start, A_dim, A, regularization, L)
 
 
 @df.kernel
 def eval_dense_subs(
-    n: int, L: df.tensor(float), b: df.tensor(float), x: df.tensor(float)
+        n: int, L: df.tensor(float), b: df.tensor(float), x: df.tensor(float)
 ):
     dense_subs(n, L, b, x)
 
@@ -2212,12 +2212,12 @@ def eval_dense_subs(
 # allows us to reuse the Cholesky decomposition from the forward pass
 @df.kernel
 def eval_dense_solve(
-    n: int,
-    A: df.tensor(float),
-    L: df.tensor(float),
-    b: df.tensor(float),
-    tmp: df.tensor(float),
-    x: df.tensor(float),
+        n: int,
+        A: df.tensor(float),
+        L: df.tensor(float),
+        b: df.tensor(float),
+        tmp: df.tensor(float),
+        x: df.tensor(float),
 ):
     dense_solve(n, A, L, b, tmp, x)
 
@@ -2226,30 +2226,30 @@ def eval_dense_solve(
 # allows us to reuse the Cholesky decomposition from the forward pass
 @df.kernel
 def eval_dense_solve_batched(
-    b_start: df.tensor(int),
-    A_start: df.tensor(int),
-    A_dim: df.tensor(int),
-    A: df.tensor(float),
-    L: df.tensor(float),
-    b: df.tensor(float),
-    tmp: df.tensor(float),
-    x: df.tensor(float),
+        b_start: df.tensor(int),
+        A_start: df.tensor(int),
+        A_dim: df.tensor(int),
+        A: df.tensor(float),
+        L: df.tensor(float),
+        b: df.tensor(float),
+        tmp: df.tensor(float),
+        x: df.tensor(float),
 ):
     dense_solve_batched(b_start, A_start, A_dim, A, L, b, tmp, x)
 
 
 @df.kernel
 def eval_rigid_integrate(
-    joint_type: df.tensor(int),
-    joint_q_start: df.tensor(int),
-    joint_qd_start: df.tensor(int),
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_qdd: df.tensor(float),
-    dt: float,
-    # outputs
-    joint_q_new: df.tensor(float),
-    joint_qd_new: df.tensor(float),
+        joint_type: df.tensor(int),
+        joint_q_start: df.tensor(int),
+        joint_qd_start: df.tensor(int),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_qdd: df.tensor(float),
+        dt: float,
+        # outputs
+        joint_q_new: df.tensor(float),
+        joint_qd_new: df.tensor(float),
 ):
     # one thread per-articulation
     index = tid()
@@ -2334,18 +2334,18 @@ class SimulateFunc(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
-        integrator,
-        model,
-        state_in,
-        dt,
-        substeps,
-        mass_matrix_freq,
-        reset_tape,
-        bundle_info,
-        num_envs,
-        link_count,
-        *tensors
+            ctx,
+            integrator,
+            model,
+            state_in,
+            dt,
+            substeps,
+            mass_matrix_freq,
+            reset_tape,
+            bundle_info,
+            num_envs,
+            link_count,
+            *tensors
     ):
         """
         ctx: context object that can be used to stash information for backward computation
@@ -2356,8 +2356,7 @@ class SimulateFunc(torch.autograd.Function):
         ctx.tape = df.Tape()
 
         # ctx.inputs is the input to the model but what are they?
-        ctx.inputs = [*tensors] + [state_in]
-        ctx.state_ins = []
+        ctx.inputs = tensors
         ctx.reset_tape = reset_tape
         ctx.num_backward = 0  # TODO very much a hack
 
@@ -2367,43 +2366,28 @@ class SimulateFunc(torch.autograd.Function):
         # TODO: Generalize. For hopper, link 5 is foot
         link = 5
         links_in_contact = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
-        
+
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
 
-        # Dict specifying which envs to merge, when and what state (ex. {3: ([0, 1, 2], state), 4: ([3, 5], state)})
-        # Key represents substep at which it needs to be merged into state out
-        to_be_merged = {}
-
-        # Save states
-        ctx.states = [state_in] + [model.state() for _ in range(substeps)]
+        # Bundling structures (now handled by DFlex kernels)
 
         # simulate
         for i in range(substeps):
-            print()
             print("SUBSTEP", i, "of", substeps)
-            state_in = ctx.states[i]
-            state_out = ctx.states[i + 1]
-
             # ensure actuation is set on all substeps
             state_in.joint_act = actuation
-
-            # state_out = model.state()
-
-            # state_in_clone = state_in.clone()
-            # state_in_clone = model.state()  # Create new state for cloning
+            state_out = model.state()
+            print("state out grad", state_out.joint_q.requires_grad, state_out.joint_qd.requires_grad)
+            print("state in grad", state_in.joint_q.requires_grad, state_in.joint_qd.requires_grad)
             state_in_clone = state_in.clone()
-            # state_in_clone = state_in
-            # ctx.outputs.extend([
-            #     state_in_clone.joint_q,
-            #     state_in_clone.joint_qd,
-            #     state_in_clone.joint_act,
-            # ])
-            integrator.clone_state_with_gradients(ctx.tape, state_in, state_in_clone, model.adapter)
-            # ctx.save_for_backward(state_in_clone.joint_q, state_in_clone.joint_qd, state_in_clone.joint_act)
-            # ctx.state_ins.append(state_in_clone)
             model_clone = model.clone()
+
+            # print("state_in grad")
+            # print(state_in.joint_q.requires_grad)
+            # print(state_in.joint_act.requires_grad)
+            # print(state_in.joint_qd.requires_grad)
 
             integrator._simulate(
                 ctx.tape,
@@ -2432,82 +2416,44 @@ class SimulateFunc(torch.autograd.Function):
                 num_bundle_steps = 3  # TODO: Make this a parameter
 
                 # Check for environments with high contact force (no exclusion needed since bundling is immediate)
-                # envs to exclude are all the envs in that have been bundled and are awaiting merge
-                envs_being_bundled = torch.cat([tup[0] for tup in to_be_merged.values()], dim=0) if to_be_merged else None
-                envs_to_bundle = SimulateFunc.get_envs_with_high_contact_force(state_out.contact_f, link, force_threshold, num_envs, link_count, envs_being_bundled)
+                envs_to_bundle = SimulateFunc.get_envs_with_high_contact_force(state_out.contact_f, link,
+                                                                               force_threshold, num_envs, link_count,
+                                                                               None)
 
-                if i > 0:
-                    envs_to_bundle = torch.empty(0)
                 if len(envs_to_bundle) > 0:
-                    print("Environments to bundle:", envs_to_bundle)
-                    # Stiff contact detected, will use bundling
+                    print("stiff contact detected")
+                    print(envs_to_bundle)
+
+                # Bundle for a few steps, then make the state_out the new state_in
+                # TODO: Remove
+                # envs_to_bundle = torch.tensor([0], device=state_out.joint_q.device)
+                # if i > 0:
+                #     envs_to_bundle = torch.empty(0)
+                if len(envs_to_bundle) > 0:
                     # Find which comes sooner, the end of substeps or the end of bundling
                     bundle_steps = min(substeps - i, num_bundle_steps)
-                    
+
                     # Use DFlex-based bundling instead of Python operations
-                    # Create sub-model and sub-state with gradient tracking
-                    bundle_model = Model(model_clone.adapter)
-                    bundle_state_in = model_clone.state()
-                    bundle_state_out = model_clone.state()
-                    
-                    # Select environments for both model and state with gradient tracking
-                    integrator.select_model_envs_with_gradients(ctx.tape, model_clone, bundle_model, envs_to_bundle)
-                    # s_in = state_in_clone.select_envs(num_envs, envs_to_bundle)
-                    s_in = state_in_clone
-                    
                     integrator._simulate_bundle(
                         ctx.tape,
-                        bundle_model,  # Use the sub-model with gradient tracking
-                        # model,
-                        s_in,
-                        # state_in.clone(),
-                        bundle_state_out,
+                        model_clone,
+                        state_in_clone,
+                        state_out,
                         dt / float(substeps),
                         bundle_info,
                         envs_to_bundle,
                         bundle_steps,
-                        i,
-                        mass_matrix_freq,
+                        update_mass_matrix=((i % mass_matrix_freq) == 0),
                     )
-                    
-                    # Save output to to_be_merged
-                    print("supposed to merge at substep", i-1 + bundle_steps)
-                    # # Create tensors for storing the bundled state with gradient tracking
-                    # bundled_joint_q = torch.zeros_like(bundle_state_out.joint_q, requires_grad=True)
-                    # bundled_joint_qd = torch.zeros_like(bundle_state_out.joint_qd, requires_grad=True)
-                    
-                    # # Use DFlex kernels to clone with gradient tracking
-                    # # Clone joint_q
-                    # ctx.tape.launch(
-                    #     func=clone_joint_q,
-                    #     dim=bundle_state_out.joint_q.shape[0],
-                    #     inputs=[bundle_state_out.joint_q],
-                    #     outputs=[bundled_joint_q],
-                    #     adapter=model.adapter,
-                    # )
-                    #
-                    # # Clone joint_qd
-                    # ctx.tape.launch(
-                    #     func=clone_joint_qd,
-                    #     dim=bundle_state_out.joint_qd.shape[0],
-                    #     inputs=[bundle_state_out.joint_qd],
-                    #     outputs=[bundled_joint_qd],
-                    #     adapter=model.adapter,
-                    # )
-
-                    to_be_merged[(i-1) + bundle_steps] = (envs_to_bundle, (bundle_state_out.joint_q.clone(), bundle_state_out.joint_qd.clone()))
-
-                    print("BUNDLE OUT")
-                    print(bundle_state_out.joint_q)
-                    print(bundle_state_out.joint_qd)
 
             # Accumulate contact metrics across substeps
             # Compute max contact force norm from contact forces
             if hasattr(state_out, 'contact_f') and state_out.contact_f is not None:
-                contact_force_norms = torch.norm(state_out.contact_f[:, 3:], dim=1)  # Only force part (last 3 components)
+                contact_force_norms = torch.norm(state_out.contact_f[:, 3:],
+                                                 dim=1)  # Only force part (last 3 components)
                 current_max_contact_norm = torch.max(contact_force_norms).item()
                 total_max_contact_force_norm = max(total_max_contact_force_norm, current_max_contact_norm)
-                
+
                 # Check if there was contact in this substep
                 has_contact = torch.any(contact_count > 0.0).item()
                 if has_contact:
@@ -2515,59 +2461,36 @@ class SimulateFunc(torch.autograd.Function):
 
             # Merge the bundled states into state_out if there are any
             if i in to_be_merged:
-                # Merge the bundled states back into state_out using DFlex kernel
-                envs_to_merge, (j_q, j_qd) = to_be_merged[i]
-                
-                # Calculate dimensions (same as in _simulate_bundle)
-                joint_coord_count = model.joint_coord_count // model.articulation_count  # per articulation
-                joint_dof_count = model.joint_dof_count // model.articulation_count      # per articulation
-
-                print("before merge")
+                print("Merging states at substep", i)
+                print("state before merge")
                 print(state_out.joint_q)
                 print(state_out.joint_qd)
-
+                envs_to_merge, (j_q, j_qd) = to_be_merged[i]
                 joint_q = state_out.joint_q.view(num_envs, -1).clone()
                 joint_qd = state_out.joint_qd.view(num_envs, -1).clone()
 
                 new_joint_q_sub = j_q.view(len(envs_to_merge), -1)
                 new_joint_qd_sub = j_qd.view(len(envs_to_merge), -1)
+                print("new", new_joint_q_sub.requires_grad, new_joint_qd_sub.requires_grad)
 
                 joint_q[envs_to_merge] = new_joint_q_sub
                 joint_qd[envs_to_merge] = new_joint_qd_sub
 
+                # joint_q[envs_to_merge] += new_joint_q_sub
+                # joint_qd[envs_to_merge] += new_joint_qd_sub
+                # joint_q[envs_to_merge] /= 2.0
+                # joint_qd[envs_to_merge] /= 2.0
+
                 state_out.joint_q = joint_q.view(-1)
                 state_out.joint_qd = joint_qd.view(-1)
-                
-                # ctx.tape.launch(
-                #     func=merge_bundled_states,
-                #     dim=max(model.articulation_count * joint_coord_count, model.articulation_count * joint_dof_count),
-                #     inputs=[
-                #         state_out.joint_q,
-                #         state_out.joint_qd,
-                #         j_q,
-                #         j_qd,
-                #         envs_to_merge,
-                #         model.articulation_count,
-                #         joint_coord_count,
-                #         joint_dof_count,
-                #         len(envs_to_merge),
-                #     ],
-                #     outputs=[
-                #         state_out.joint_q,
-                #         state_out.joint_qd,
-                #     ],
-                #     adapter=model.adapter,
-                # )
-
-                print("after merge")
+                print("state after merge")
                 print(state_out.joint_q)
                 print(state_out.joint_qd)
 
-                print("Merged bundled states at substep", i)
                 del to_be_merged[i]  # Remove the merged entry
 
             # swap states
-            # state_in = state_out
+            state_in = state_out
 
         global envs_in_contact
         envs_in_contact = torch.nonzero(links_in_contact).squeeze(1)
@@ -2581,12 +2504,11 @@ class SimulateFunc(torch.autograd.Function):
 
         # ctx.outputs is simple the output of a single step simulation
         ctx.outputs = df.to_weak_list(state_out.flatten())
-        ctx.outputs.extend(df.to_weak_list(state_in.flatten()))
         return tuple(state_out.flatten())
 
     @staticmethod
     def backward(ctx, *grad_output):
-        ctx.num_backward = ctx.num_backward + 1
+        ctx.num_backward += 1
         # NOTE: debugging code below
         # print("calling backwards!")
         # tot_norm = 0
@@ -2640,7 +2562,7 @@ class SimulateFunc(torch.autograd.Function):
 
         # Free the tape if we don't think it would be useful again;
         #   otherwise just zero it so that we don't accumulate gradients
-        if ctx.reset_tape: # or ctx.num_backward == 11:  # this should be output dim!
+        if ctx.reset_tape:  # or ctx.num_backward == 11:  # this should be output dim!
             ctx.tape.reset()
         else:
             ctx.tape.zero()
@@ -2683,13 +2605,13 @@ class SemiImplicitIntegrator:
             self.noise_gen.manual_seed(bundle_seed)
 
     def forward(
-        self,
-        model: Model,
-        state_in: State,
-        dt: float,
-        substeps: int,
-        mass_matrix_freq: int,
-        reset_tape: bool = True,
+            self,
+            model: Model,
+            state_in: State,
+            dt: float,
+            substeps: int,
+            mass_matrix_freq: int,
+            reset_tape: bool = True,
     ) -> State:
         """Performs a single integration step forward in time
 
@@ -2946,196 +2868,20 @@ class SemiImplicitIntegrator:
 
             return state_out
 
-    def clone_state_with_gradients(self, tape, state_in, state_out, adapter):
-        """Clone state variables with gradient tracking using DFlex kernels"""
-        # Clone joint_q
-        tape.launch(
-            func=clone_joint_q,
-            dim=state_in.joint_q.shape[0],
-            inputs=[state_in.joint_q],
-            outputs=[state_out.joint_q],
-            adapter=adapter,
-        )
-
-        # Clone joint_qd
-        tape.launch(
-            func=clone_joint_qd,
-            dim=state_in.joint_qd.shape[0],
-            inputs=[state_in.joint_qd],
-            outputs=[state_out.joint_qd],
-            adapter=adapter,
-        )
-        
-        # Clone joint_act
-        tape.launch(
-            func=clone_joint_act,
-            dim=state_in.joint_act.shape[0],
-            inputs=[state_in.joint_act],
-            outputs=[state_out.joint_act],
-            adapter=adapter,
-        )
-
-    def select_model_envs_with_gradients(self, tape, model_in, model_out, env_indices):
-        """Select environments from model with gradient tracking using DFlex kernel for mass matrices"""
-        # First, use Python operations to copy the basic model structure
-        # This is necessary because the full model selection is too complex for a single kernel
-        
-        # Copy non-tensor attributes
-        for attr, val in model_in.__dict__.items():
-            if torch.is_tensor(val):
-                continue  # handled below
-            if attr.endswith("_count"):
-                continue  # handled later
-            setattr(model_out, attr, copy.deepcopy(val))
-        
-        # Calculate per-environment counts
-        num_envs_full = int(model_in.articulation_count)
-        n_keep = len(env_indices)
-        
-        def _per_env(total):
-            return int(total // num_envs_full) if total else 0
-        
-        n_links_env = _per_env(model_in.link_count)
-        n_coords_env = _per_env(model_in.joint_coord_count)
-        n_dofs_env = _per_env(model_in.joint_dof_count)
-        
-        # Copy basic tensors using Python operations (these are simpler)
-        # For now, we'll use the existing select_envs method for the basic structure
-        # and then override the mass matrices with our kernel
-        
-        # Use the existing select_envs method to get the basic structure
-        temp_model = model_in.select_envs(env_indices)
-        
-        # Copy the basic structure to our output model
-        for attr, val in temp_model.__dict__.items():
-            if torch.is_tensor(val) and attr not in ['J', 'M', 'P', 'H', 'L']:
-                setattr(model_out, attr, val)
-            elif not torch.is_tensor(val):
-                setattr(model_out, attr, val)
-        
-        # Now handle mass matrices with our kernel for gradient tracking
-        if (model_in.J is not None and model_in.M is not None and 
-            model_in.P is not None and model_in.H is not None and model_in.L is not None):
-            
-            # Calculate sizes for the sub-model mass matrices
-            J_size_sub = 0
-            M_size_sub = 0
-            H_size_sub = 0
-            
-            for e in env_indices:
-                # Calculate sizes for each environment
-                J_start = model_in.articulation_J_start[e]
-                J_end = model_in.articulation_J_start[e + 1] if e + 1 < len(model_in.articulation_J_start) else model_in.J_size
-                J_size_sub += J_end - J_start
-                
-                M_start = model_in.articulation_M_start[e]
-                M_end = model_in.articulation_M_start[e + 1] if e + 1 < len(model_in.articulation_M_start) else model_in.M_size
-                M_size_sub += M_end - M_start
-                
-                H_start = model_in.articulation_H_start[e]
-                H_end = model_in.articulation_H_start[e + 1] if e + 1 < len(model_in.articulation_H_start) else model_in.H_size
-                H_size_sub += H_end - H_start
-            
-            # Allocate tensors with gradient tracking
-            model_out.J = torch.zeros(J_size_sub, dtype=torch.float32, device=model_in.adapter, requires_grad=True)
-            model_out.M = torch.zeros(M_size_sub, dtype=torch.float32, device=model_in.adapter, requires_grad=True)
-            model_out.P = torch.zeros(J_size_sub, dtype=torch.float32, device=model_in.adapter, requires_grad=True)
-            model_out.H = torch.zeros(H_size_sub, dtype=torch.float32, device=model_in.adapter, requires_grad=True)
-            model_out.L = torch.zeros(H_size_sub, dtype=torch.float32, device=model_in.adapter, requires_grad=True)
-            
-            # Use separate kernels to copy each mass matrix with gradient tracking
-            # J matrix
-            tape.launch(
-                func=select_model_envs_J_matrix,
-                dim=J_size_sub,
-                inputs=[
-                    model_in.J,
-                    model_in.articulation_J_start,
-                    env_indices,
-                    n_keep,
-                ],
-                outputs=[model_out.J],
-                adapter=model_in.adapter,
-            )
-            
-            # M matrix
-            tape.launch(
-                func=select_model_envs_M_matrix,
-                dim=M_size_sub,
-                inputs=[
-                    model_in.M,
-                    model_in.articulation_M_start,
-                    env_indices,
-                    n_keep,
-                ],
-                outputs=[model_out.M],
-                adapter=model_in.adapter,
-            )
-            
-            # P matrix
-            tape.launch(
-                func=select_model_envs_P_matrix,
-                dim=J_size_sub,  # Same size as J
-                inputs=[
-                    model_in.P,
-                    model_in.articulation_J_start,  # P uses same indices as J
-                    env_indices,
-                    n_keep,
-                ],
-                outputs=[model_out.P],
-                adapter=model_in.adapter,
-            )
-            
-            # H matrix
-            tape.launch(
-                func=select_model_envs_H_matrix,
-                dim=H_size_sub,
-                inputs=[
-                    model_in.H,
-                    model_in.articulation_H_start,
-                    env_indices,
-                    n_keep,
-                ],
-                outputs=[model_out.H],
-                adapter=model_in.adapter,
-            )
-            
-            # L matrix
-            tape.launch(
-                func=select_model_envs_L_matrix,
-                dim=H_size_sub,  # Same size as H
-                inputs=[
-                    model_in.L,
-                    model_in.articulation_H_start,  # L uses same indices as H
-                    env_indices,
-                    n_keep,
-                ],
-                outputs=[model_out.L],
-                adapter=model_in.adapter,
-            )
-        else:
-            # If mass matrices haven't been allocated yet, set to None
-            model_out.J = model_out.M = model_out.P = model_out.H = model_out.L = None
-        
-        # Update counts for the sub-model
-        model_out.articulation_count = n_keep
-        model_out.link_count = n_links_env * n_keep
-        model_out.joint_coord_count = n_coords_env * n_keep
-        model_out.joint_dof_count = n_dofs_env * n_keep
-
-    def _simulate_bundle(self, tape, model, state_in, state_out, dt, bundle_info, envs_to_bundle, num_bundle_steps, current_substep, mass_matrix_freq):
+    def _simulate_bundle(self, tape, model, state_in, state_out, dt, bundle_info, envs_to_bundle, num_bundle_steps,
+                         update_mass_matrix=True):
         """Simulate with bundling for specific environments using DFlex kernels"""
         with dflex.util.ScopedTimer("simulate_bundle", False):
             # Extract bundle parameters
             num_samples = bundle_info[4]
             sigma = bundle_info[5]
             noise_idx = bundle_info[2]
-            
+
             # Get dimensions
             num_envs = len(envs_to_bundle)
             joint_coord_count = model.joint_coord_count // model.articulation_count  # per articulation
-            joint_dof_count = model.joint_dof_count // model.articulation_count      # per articulation
-            
+            joint_dof_count = model.joint_dof_count // model.articulation_count  # per articulation
+
             # Allocate tensors for bundling
             bundle_joint_q_samples = torch.zeros(
                 num_samples * num_envs * joint_coord_count,
@@ -3149,7 +2895,7 @@ class SemiImplicitIntegrator:
                 device=model.adapter,
                 requires_grad=True
             )
-            
+
             # Run multiple samples with noise
             for sample in range(num_samples):
                 # Create bundle state for this sample
@@ -3175,7 +2921,7 @@ class SemiImplicitIntegrator:
                     ],
                     adapter=model.adapter,
                 )
-                
+
                 # Add noise to controls if specified
                 if noise_idx is not None and sigma > 0.0:
                     noise_indices = torch.tensor(noise_idx, device=model.adapter, dtype=torch.int32)
@@ -3185,7 +2931,7 @@ class SemiImplicitIntegrator:
                         device=model.adapter,
                         generator=self.noise_gen
                     ) * sigma
-                    
+
                     tape.launch(
                         func=add_noise_to_controls,
                         dim=bundle_state.joint_act.shape[0],
@@ -3193,51 +2939,33 @@ class SemiImplicitIntegrator:
                             bundle_state.joint_act,
                             noise_indices,
                             noise_values,
-                            len(noise_idx),
                         ],
                         outputs=[bundle_state.joint_act],
                         adapter=model.adapter,
                     )
-                
-                # Simulate bundle for multiple steps
-                # After add_noise_to_controls kernel
-                # Create tensor for storing the noisy joint_act with gradient tracking
-                noisy_joint_act_sample = torch.zeros_like(bundle_state.joint_act, requires_grad=True)
-                
-                # Use DFlex kernel to clone joint_act with gradient tracking
-                tape.launch(
-                    func=clone_joint_act,
-                    dim=bundle_state.joint_act.shape[0],
-                    inputs=[bundle_state.joint_act],
-                    outputs=[noisy_joint_act_sample],
-                    adapter=model.adapter,
-                )
 
                 # Simulate bundle for multiple steps
+                bundle_state_out = model.state()
                 for step in range(num_bundle_steps):
-                    # Set the correct noisy control for this sample at every step
-                    bundle_state.joint_act = noisy_joint_act_sample
-                    bundle_state_out = model.state()
-
                     self._simulate(
                         tape,
                         model,
                         bundle_state,
                         bundle_state_out,
                         dt,
-                        update_mass_matrix=((step + current_substep) % mass_matrix_freq) == 0,
+                        update_mass_matrix=update_mass_matrix,
                     )
                     bundle_state = bundle_state_out
-                
+
                 # Store results for this sample
                 start_idx = sample * num_envs * joint_coord_count
                 end_idx = start_idx + num_envs * joint_coord_count
                 bundle_joint_q_samples[start_idx:end_idx] = bundle_state.joint_q
-                
+
                 start_idx = sample * num_envs * joint_dof_count
                 end_idx = start_idx + num_envs * joint_dof_count
                 bundle_joint_qd_samples[start_idx:end_idx] = bundle_state.joint_qd
-            
+
             # Average results across samples using DFlex kernel
             avg_bundle_joint_q = torch.zeros(
                 num_envs * joint_coord_count,
@@ -3259,7 +2987,6 @@ class SemiImplicitIntegrator:
                     bundle_joint_q_samples,
                     bundle_joint_qd_samples,
                     num_samples,
-                    1.0 / num_samples,
                     joint_coord_count,
                     joint_dof_count,
                 ],
@@ -3270,13 +2997,19 @@ class SemiImplicitIntegrator:
                 adapter=model.adapter,
             )
 
-            # Assign averaged bundled states directly to output state using DFlex kernel
+            # Merge back into main state using DFlex kernel
             tape.launch(
-                func=assign_bundled_states,
-                dim=max(num_envs * joint_coord_count, num_envs * joint_dof_count),
+                func=merge_bundled_states,
+                dim=max(model.articulation_count * joint_coord_count, model.articulation_count * joint_dof_count),
                 inputs=[
+                    state_out.joint_q,
+                    state_out.joint_qd,
                     avg_bundle_joint_q,
                     avg_bundle_joint_qd,
+                    envs_to_bundle,
+                    model.articulation_count,
+                    joint_coord_count,
+                    joint_dof_count,
                 ],
                 outputs=[
                     state_out.joint_q,
@@ -3494,7 +3227,7 @@ class SemiImplicitIntegrator:
                     )
 
                     state_out.contact_f = (
-                        state_out.body_f_s.clone() - prev_body_f_s
+                            state_out.body_f_s.clone() - prev_body_f_s
                     ).detach()
 
                 # particle shape contact
@@ -3724,15 +3457,15 @@ class SemiImplicitIntegrator:
 
 @df.kernel
 def solve_springs(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    invmass: df.tensor(float),
-    spring_indices: df.tensor(int),
-    spring_rest_lengths: df.tensor(float),
-    spring_stiffness: df.tensor(float),
-    spring_damping: df.tensor(float),
-    dt: float,
-    delta: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        invmass: df.tensor(float),
+        spring_indices: df.tensor(int),
+        spring_rest_lengths: df.tensor(float),
+        spring_stiffness: df.tensor(float),
+        spring_damping: df.tensor(float),
+        dt: float,
+        delta: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -3780,16 +3513,16 @@ def solve_springs(
 
 @df.kernel
 def solve_tetrahedra(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    inv_mass: df.tensor(float),
-    indices: df.tensor(int),
-    pose: df.tensor(df.mat33),
-    activation: df.tensor(float),
-    materials: df.tensor(float),
-    dt: float,
-    relaxation: float,
-    delta: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        inv_mass: df.tensor(float),
+        indices: df.tensor(int),
+        pose: df.tensor(df.mat33),
+        activation: df.tensor(float),
+        materials: df.tensor(float),
+        dt: float,
+        relaxation: float,
+        delta: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -3880,10 +3613,10 @@ def solve_tetrahedra(
     grad0 = (grad1 + grad2 + grad3) * (0.0 - 1.0)
 
     denom = (
-        dot(grad0, grad0) * w0
-        + dot(grad1, grad1) * w1
-        + dot(grad2, grad2) * w2
-        + dot(grad3, grad3) * w3
+            dot(grad0, grad0) * w0
+            + dot(grad1, grad1) * w1
+            + dot(grad2, grad2) * w2
+            + dot(grad3, grad3) * w3
     )
     multiplier = C / (denom + 1.0 / (k_mu * dt * dt * rest_volume))
 
@@ -3910,10 +3643,10 @@ def solve_tetrahedra(
     grad0 = (grad1 + grad2 + grad3) * (0.0 - 1.0)
 
     denom = (
-        dot(grad0, grad0) * w0
-        + dot(grad1, grad1) * w1
-        + dot(grad2, grad2) * w2
-        + dot(grad3, grad3) * w3
+            dot(grad0, grad0) * w0
+            + dot(grad1, grad1) * w1
+            + dot(grad2, grad2) * w2
+            + dot(grad3, grad3) * w3
     )
     multiplier = C_vol / (denom + 1.0 / (k_lambda * dt * dt * rest_volume))
 
@@ -3931,12 +3664,12 @@ def solve_tetrahedra(
 
 @df.kernel
 def solve_contacts(
-    x: df.tensor(df.float3),
-    v: df.tensor(df.float3),
-    inv_mass: df.tensor(float),
-    mu: float,
-    dt: float,
-    delta: df.tensor(df.float3),
+        x: df.tensor(df.float3),
+        v: df.tensor(df.float3),
+        inv_mass: df.tensor(float),
+        mu: float,
+        dt: float,
+        delta: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -3967,13 +3700,13 @@ def solve_contacts(
 
 @df.kernel
 def apply_deltas(
-    x_orig: df.tensor(df.float3),
-    v_orig: df.tensor(df.float3),
-    x_pred: df.tensor(df.float3),
-    delta: df.tensor(df.float3),
-    dt: float,
-    x_out: df.tensor(df.float3),
-    v_out: df.tensor(df.float3),
+        x_orig: df.tensor(df.float3),
+        v_orig: df.tensor(df.float3),
+        x_pred: df.tensor(df.float3),
+        delta: df.tensor(df.float3),
+        dt: float,
+        x_out: df.tensor(df.float3),
+        v_out: df.tensor(df.float3),
 ):
     tid = df.tid()
 
@@ -4016,7 +3749,7 @@ class XPBDIntegrator:
         pass
 
     def forward(
-        self, model: Model, state_in: State, dt: float, reset_tape: bool = True
+            self, model: Model, state_in: State, dt: float, reset_tape: bool = True
     ) -> State:
         """Performs a single integration step forward in time
 
@@ -4155,342 +3888,120 @@ class XPBDIntegrator:
 
             return state_out
 
+
 @df.kernel
 def select_envs_joint_state(
-    joint_q: df.tensor(float),
-    joint_qd: df.tensor(float),
-    joint_act: df.tensor(float),
-    env_indices: df.tensor(int),
-    num_envs: int,
-    joint_coord_count: int,
-    joint_dof_count: int,
-    # outputs
-    selected_joint_q: df.tensor(float),
-    selected_joint_qd: df.tensor(float),
-    selected_joint_act: df.tensor(float),
+        joint_q: df.tensor(float),
+        joint_qd: df.tensor(float),
+        joint_act: df.tensor(float),
+        env_indices: df.tensor(int),
+        num_envs: int,
+        joint_coord_count: int,
+        joint_dof_count: int,
+        # outputs
+        selected_joint_q: df.tensor(float),
+        selected_joint_qd: df.tensor(float),
+        selected_joint_act: df.tensor(float),
 ):
     """Select joint states for specific environments"""
     tid = df.tid()
-    env_idx = df.load(env_indices, tid)
-    
+    env_idx = env_indices[tid]
+
     # Calculate offsets for this environment
     q_start = env_idx * joint_coord_count
     qd_start = env_idx * joint_dof_count
-    
+
     # Copy joint_q data
-    for i in range(0, joint_coord_count):
-        val = df.load(joint_q, q_start + i)
-        df.store(selected_joint_q, tid * joint_coord_count + i, val)
-    
+    for i in range(joint_coord_count):
+        selected_joint_q[tid * joint_coord_count + i] = joint_q[q_start + i]
+
     # Copy joint_qd data
-    for i in range(0, joint_dof_count):
-        val_qd = df.load(joint_qd, qd_start + i)
-        val_act = df.load(joint_act, qd_start + i)
-        df.store(selected_joint_qd, tid * joint_dof_count + i, val_qd)
-        df.store(selected_joint_act, tid * joint_dof_count + i, val_act)
+    for i in range(joint_dof_count):
+        selected_joint_qd[tid * joint_dof_count + i] = joint_qd[qd_start + i]
+        selected_joint_act[tid * joint_dof_count + i] = joint_act[qd_start + i]
+
 
 @df.kernel
 def average_joint_states(
-    joint_q_samples: df.tensor(float),
-    joint_qd_samples: df.tensor(float),
-    num_samples: int,
-    inv_num_samples: float,
-    joint_coord_count: int,
-    joint_dof_count: int,
-    # outputs
-    avg_joint_q: df.tensor(float),
-    avg_joint_qd: df.tensor(float),
+        joint_q_samples: df.tensor(float),
+        joint_qd_samples: df.tensor(float),
+        num_samples: int,
+        joint_coord_count: int,
+        joint_dof_count: int,
+        # outputs
+        avg_joint_q: df.tensor(float),
+        avg_joint_qd: df.tensor(float),
 ):
     """Average joint states across multiple samples"""
     tid = df.tid()
-    
+
     # Average joint_q
     if tid < joint_coord_count:
         sum_q = 0.0
-        for sample in range(0, num_samples):
-            val = df.load(joint_q_samples, sample * joint_coord_count + tid)
-            sum_q = sum_q + val
-            avg_val = sum_q * inv_num_samples
-        df.store(avg_joint_q, tid, avg_val)
+        for sample in range(num_samples):
+            sum_q += joint_q_samples[sample * joint_coord_count + tid]
+        avg_joint_q[tid] = sum_q / float(num_samples)
 
     # Average joint_qd
     if tid < joint_dof_count:
         sum_qd = 0.0
-        for sample in range(0, num_samples):
-            val = df.load(joint_qd_samples, sample * joint_dof_count + tid)
-            sum_qd = sum_qd + val
-            avg_val = sum_qd * inv_num_samples
-        df.store(avg_joint_qd, tid, avg_val)
+        for sample in range(num_samples):
+            sum_qd += joint_qd_samples[sample * joint_dof_count + tid]
+        avg_joint_qd[tid] = sum_qd / float(num_samples)
+
 
 @df.kernel
 def merge_bundled_states(
-    main_joint_q: df.tensor(float),
-    main_joint_qd: df.tensor(float),
-    bundled_joint_q: df.tensor(float),
-    bundled_joint_qd: df.tensor(float),
-    env_indices: df.tensor(int),
-    num_envs: int,
-    joint_coord_count: int,
-    joint_dof_count: int,
-    num_bundle_envs: int,
-    # outputs
-    merged_joint_q: df.tensor(float),
-    merged_joint_qd: df.tensor(float),
+        main_joint_q: df.tensor(float),
+        main_joint_qd: df.tensor(float),
+        bundled_joint_q: df.tensor(float),
+        bundled_joint_qd: df.tensor(float),
+        env_indices: df.tensor(int),
+        num_envs: int,
+        joint_coord_count: int,
+        joint_dof_count: int,
+        # outputs
+        merged_joint_q: df.tensor(float),
+        merged_joint_qd: df.tensor(float),
 ):
     """Merge bundled states back into main state"""
     tid = df.tid()
-    
+
     # Copy main state first
     if tid < num_envs * joint_coord_count:
-        val = df.load(main_joint_q, tid)
-        df.store(merged_joint_q, tid, val)
-    
+        merged_joint_q[tid] = main_joint_q[tid]
+
     if tid < num_envs * joint_dof_count:
-        val = df.load(main_joint_qd, tid)
-        df.store(merged_joint_qd, tid, val)
-    
+        merged_joint_qd[tid] = main_joint_qd[tid]
+
     # Overwrite with bundled states for specific environments
     bundle_idx = tid // joint_coord_count
-    if bundle_idx < num_bundle_envs:
-        env_idx = df.load(env_indices, bundle_idx)
+    if bundle_idx < len(env_indices):
+        env_idx = env_indices[bundle_idx]
         local_idx = tid % joint_coord_count
-        
+
         if local_idx < joint_coord_count:
-            val = df.load(bundled_joint_q, bundle_idx * joint_coord_count + local_idx)
-            df.store(merged_joint_q, env_idx * joint_coord_count + local_idx, val)
-        
+            merged_joint_q[env_idx * joint_coord_count + local_idx] = bundled_joint_q[
+                bundle_idx * joint_coord_count + local_idx]
+
         if local_idx < joint_dof_count:
-            val = df.load(bundled_joint_qd, bundle_idx * joint_dof_count + local_idx)
-            df.store(merged_joint_qd, env_idx * joint_dof_count + local_idx, val)
+            merged_joint_qd[env_idx * joint_dof_count + local_idx] = bundled_joint_qd[
+                bundle_idx * joint_dof_count + local_idx]
+
 
 @df.kernel
 def add_noise_to_controls(
-    joint_act: df.tensor(float),
-    noise_indices: df.tensor(int),
-    noise_values: df.tensor(float),
-    num_noise_indices: int,
-    # outputs
-    noisy_joint_act: df.tensor(float),
+        joint_act: df.tensor(float),
+        noise_indices: df.tensor(int),
+        noise_values: df.tensor(float),
+        # outputs
+        noisy_joint_act: df.tensor(float),
 ):
     """Add noise to control signals"""
     tid = df.tid()
-    val = df.load(joint_act, tid)
-    df.store(noisy_joint_act, tid, val)
-    
+    noisy_joint_act[tid] = joint_act[tid]
+
     # Add noise to specified indices
-    for i in range(0, num_noise_indices):
-        noise_idx = df.load(noise_indices, i)
-        if tid == noise_idx:
-            noise_val = df.load(noise_values, i)
-            current_val = df.load(noisy_joint_act, tid)
-            df.store(noisy_joint_act, tid, current_val + noise_val)
-
-@df.kernel
-def assign_bundled_states(
-    bundled_joint_q: df.tensor(float),
-    bundled_joint_qd: df.tensor(float),
-    # outputs
-    state_joint_q: df.tensor(float),
-    state_joint_qd: df.tensor(float),
-):
-    """Assign bundled states directly to output state"""
-    tid = df.tid()
-    
-    # Assign bundled states directly to output state
-    val_q = df.load(bundled_joint_q, tid)
-    val_qd = df.load(bundled_joint_qd, tid)
-    
-    df.store(state_joint_q, tid, val_q)
-    df.store(state_joint_qd, tid, val_qd)
-
-@df.kernel
-def clone_joint_q(
-    # Input joint_q
-    joint_q_in: df.tensor(float),
-    # Output joint_q (cloned)
-    joint_q_out: df.tensor(float),
-):
-    """Clone joint_q with gradient tracking"""
-    tid = df.tid()
-    val_q = df.load(joint_q_in, tid)
-    df.store(joint_q_out, tid, val_q)
-
-@df.kernel
-def clone_joint_qd(
-    # Input joint_qd
-    joint_qd_in: df.tensor(float),
-    # Output joint_qd (cloned)
-    joint_qd_out: df.tensor(float),
-):
-    """Clone joint_qd with gradient tracking"""
-    tid = df.tid()
-    val_qd = df.load(joint_qd_in, tid)
-    df.store(joint_qd_out, tid, val_qd)
-
-@df.kernel
-def clone_joint_act(
-    # Input joint_act
-    joint_act_in: df.tensor(float),
-    # Output joint_act (cloned)
-    joint_act_out: df.tensor(float),
-):
-    """Clone joint_act with gradient tracking"""
-    tid = df.tid()
-    val_act = df.load(joint_act_in, tid)
-    df.store(joint_act_out, tid, val_act)
-
-@df.kernel
-def select_model_envs_J_matrix(
-    # Input J matrix from main model
-    J_in: df.tensor(float),
-    # Start indices for each environment
-    articulation_J_start: df.tensor(int),
-    # Environment indices to select
-    env_indices: df.tensor(int),
-    num_envs_to_select: int,
-    # Output J matrix for sub-model
-    J_out: df.tensor(float),
-):
-    """Select J matrix blocks for specific environments with gradient tracking"""
-    tid = df.tid()
-    
-    # Find which environment this element belongs to
-    current_pos = 0
-    for i in range(0, num_envs_to_select):
-        env_to_select = df.load(env_indices, i)
-        J_start = df.load(articulation_J_start, env_to_select)
-        J_end = df.load(articulation_J_start, env_to_select + 1)
-        J_size = J_end - J_start
-        
-        if tid < current_pos + J_size:
-            # This element belongs to environment i
-            local_idx = tid - current_pos
-            val = df.load(J_in, J_start + local_idx)
-            df.store(J_out, tid, val)
-            break
-        
-        current_pos = current_pos + J_size
-
-@df.kernel
-def select_model_envs_M_matrix(
-    # Input M matrix from main model
-    M_in: df.tensor(float),
-    # Start indices for each environment
-    articulation_M_start: df.tensor(int),
-    # Environment indices to select
-    env_indices: df.tensor(int),
-    num_envs_to_select: int,
-    # Output M matrix for sub-model
-    M_out: df.tensor(float),
-):
-    """Select M matrix blocks for specific environments with gradient tracking"""
-    tid = df.tid()
-    
-    # Find which environment this element belongs to
-    current_pos = 0
-    for i in range(0, num_envs_to_select):
-        env_to_select = df.load(env_indices, i)
-        M_start = df.load(articulation_M_start, env_to_select)
-        M_end = df.load(articulation_M_start, env_to_select + 1)
-        M_size = M_end - M_start
-        
-        if tid < current_pos + M_size:
-            local_idx = tid - current_pos
-            val = df.load(M_in, M_start + local_idx)
-            df.store(M_out, tid, val)
-            break
-        
-        current_pos = current_pos + M_size
-
-@df.kernel
-def select_model_envs_P_matrix(
-    # Input P matrix from main model
-    P_in: df.tensor(float),
-    # Start indices for each environment (P uses same indices as J)
-    articulation_J_start: df.tensor(int),
-    # Environment indices to select
-    env_indices: df.tensor(int),
-    num_envs_to_select: int,
-    # Output P matrix for sub-model
-    P_out: df.tensor(float),
-):
-    """Select P matrix blocks for specific environments with gradient tracking"""
-    tid = df.tid()
-    
-    # Find which environment this element belongs to
-    current_pos = 0
-    for i in range(0, num_envs_to_select):
-        env_to_select = df.load(env_indices, i)
-        P_start = df.load(articulation_J_start, env_to_select)  # P uses same indices as J
-        P_end = df.load(articulation_J_start, env_to_select + 1)
-        P_size = P_end - P_start
-        
-        if tid < current_pos + P_size:
-            local_idx = tid - current_pos
-            val = df.load(P_in, P_start + local_idx)
-            df.store(P_out, tid, val)
-            break
-        
-        current_pos = current_pos + P_size
-
-@df.kernel
-def select_model_envs_H_matrix(
-    # Input H matrix from main model
-    H_in: df.tensor(float),
-    # Start indices for each environment
-    articulation_H_start: df.tensor(int),
-    # Environment indices to select
-    env_indices: df.tensor(int),
-    num_envs_to_select: int,
-    # Output H matrix for sub-model
-    H_out: df.tensor(float),
-):
-    """Select H matrix blocks for specific environments with gradient tracking"""
-    tid = df.tid()
-    
-    # Find which environment this element belongs to
-    current_pos = 0
-    for i in range(0, num_envs_to_select):
-        env_to_select = df.load(env_indices, i)
-        H_start = df.load(articulation_H_start, env_to_select)
-        H_end = df.load(articulation_H_start, env_to_select + 1)
-        H_size = H_end - H_start
-        
-        if tid < current_pos + H_size:
-            local_idx = tid - current_pos
-            val = df.load(H_in, H_start + local_idx)
-            df.store(H_out, tid, val)
-            break
-        
-        current_pos = current_pos + H_size
-
-@df.kernel
-def select_model_envs_L_matrix(
-    # Input L matrix from main model
-    L_in: df.tensor(float),
-    # Start indices for each environment (L uses same indices as H)
-    articulation_H_start: df.tensor(int),
-    # Environment indices to select
-    env_indices: df.tensor(int),
-    num_envs_to_select: int,
-    # Output L matrix for sub-model
-    L_out: df.tensor(float),
-):
-    """Select L matrix blocks for specific environments with gradient tracking"""
-    tid = df.tid()
-    
-    # Find which environment this element belongs to
-    current_pos = 0
-    for i in range(0, num_envs_to_select):
-        env_to_select = df.load(env_indices, i)
-        L_start = df.load(articulation_H_start, env_to_select)  # L uses same indices as H
-        L_end = df.load(articulation_H_start, env_to_select + 1)
-        L_size = L_end - L_start
-        
-        if tid < current_pos + L_size:
-            local_idx = tid - current_pos
-            val = df.load(L_in, L_start + local_idx)
-            df.store(L_out, tid, val)
-            break
-        
-        current_pos = current_pos + L_size
+    for i in range(len(noise_indices)):
+        if tid == noise_indices[i]:
+            noisy_joint_act[tid] += noise_values[i]

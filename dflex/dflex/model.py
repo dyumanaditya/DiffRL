@@ -237,6 +237,8 @@ class State:
                 setattr(sub, attr,
                         [self._slice_by_env(v, num_envs, env_ids).clone() for v in val])
 
+            # setattr(sub, attr, val)
+
         return sub
 
 
@@ -1067,11 +1069,77 @@ class Model:
         sub.articulation_coord_start = torch.tensor([i * n_coords_env for i in range(n_keep)], dtype=self.articulation_coord_start.dtype if hasattr(self, 'articulation_coord_start') else torch.int32, device=self.adapter)
         sub.articulation_dof_start = torch.tensor([i * n_dofs_env for i in range(n_keep)], dtype=self.articulation_dof_start.dtype, device=self.adapter)
 
-        # The *matrix* offset arrays etc. are rebuilt lazily at runtime the
-        # first time the simulator calls ``alloc_mass_matrix()`` so we can
-        # simply clear them here and let the simulator rebuild.
-        sub.J = sub.M = sub.P = sub.H = sub.L = None
-        # sub.J = sub.M = sub.P = sub.H = sub.L = self.J = self.M = self.P = self.H = self.L
+        # Extract the relevant portions of mass matrix tensors from the main model
+        if self.J is not None and self.M is not None and self.P is not None and self.H is not None and self.L is not None:
+            # First, allocate the tensors with the correct sizes
+            J_size_sub = 0
+            M_size_sub = 0
+            H_size_sub = 0
+            
+            for e in keep_envs:
+                # Calculate sizes for each environment
+                J_start = self.articulation_J_start[e]
+                J_end = self.articulation_J_start[e + 1] if e + 1 < len(self.articulation_J_start) else self.J_size
+                J_size_sub += J_end - J_start
+                
+                M_start = self.articulation_M_start[e]
+                M_end = self.articulation_M_start[e + 1] if e + 1 < len(self.articulation_M_start) else self.M_size
+                M_size_sub += M_end - M_start
+                
+                H_start = self.articulation_H_start[e]
+                H_end = self.articulation_H_start[e + 1] if e + 1 < len(self.articulation_H_start) else self.H_size
+                H_size_sub += H_end - H_start
+            
+            # Allocate tensors
+            sub.J = torch.zeros(J_size_sub, dtype=torch.float32, device=self.adapter, requires_grad=True)
+            sub.M = torch.zeros(M_size_sub, dtype=torch.float32, device=self.adapter, requires_grad=True)
+            sub.P = torch.zeros(J_size_sub, dtype=torch.float32, device=self.adapter, requires_grad=True)  # Same size as J
+            sub.H = torch.zeros(H_size_sub, dtype=torch.float32, device=self.adapter, requires_grad=True)
+            sub.L = torch.zeros(H_size_sub, dtype=torch.float32, device=self.adapter, requires_grad=True)  # Same size as H
+            
+            # Now copy the data in a way that maintains gradient connections
+            J_offset = 0
+            M_offset = 0
+            H_offset = 0
+            
+            for e in keep_envs:
+                # J matrix blocks
+                J_start = self.articulation_J_start[e]
+                J_end = self.articulation_J_start[e + 1] if e + 1 < len(self.articulation_J_start) else self.J_size
+                J_size = J_end - J_start
+                sub.J[J_offset:J_offset + J_size] = torch.clone(self.J[J_start:J_end])
+                
+                # M matrix blocks
+                M_start = self.articulation_M_start[e]
+                M_end = self.articulation_M_start[e + 1] if e + 1 < len(self.articulation_M_start) else self.M_size
+                M_size = M_end - M_start
+                sub.M[M_offset:M_offset + M_size] = torch.clone(self.M[M_start:M_end])
+                
+                # P matrix blocks (same structure as J)
+                P_start = self.articulation_J_start[e]  # P uses same start indices as J
+                P_end = self.articulation_J_start[e + 1] if e + 1 < len(self.articulation_J_start) else self.J_size
+                P_size = P_end - P_start
+                sub.P[J_offset:J_offset + P_size] = torch.clone(self.P[P_start:P_end])
+                
+                # H matrix blocks
+                H_start = self.articulation_H_start[e]
+                H_end = self.articulation_H_start[e + 1] if e + 1 < len(self.articulation_H_start) else self.H_size
+                H_size = H_end - H_start
+                sub.H[H_offset:H_offset + H_size] = torch.clone(self.H[H_start:H_end])
+                
+                # L matrix blocks (same structure as H)
+                L_start = self.articulation_H_start[e]  # L uses same start indices as H
+                L_end = self.articulation_H_start[e + 1] if e + 1 < len(self.articulation_H_start) else self.H_size
+                L_size = L_end - L_start
+                sub.L[H_offset:H_offset + L_size] = torch.clone(self.L[L_start:L_end])
+                
+                # Update offsets
+                J_offset += J_size
+                M_offset += M_size
+                H_offset += H_size
+        else:
+            # If mass matrices haven't been allocated yet, set to None
+            sub.J = sub.M = sub.P = sub.H = sub.L = None
 
         # ---------- scalar counters ----------
 
@@ -1209,14 +1277,14 @@ class Model:
         # sub.particle_qd = self.particle_qd
         # sub.particle_mass = self.particle_mass
         # sub.particle_inv_mass = self.particle_inv_mass
-
+        #
         # sub.shape_transform = self.shape_transform
         # sub.shape_body = self.shape_body
         # sub.shape_geo_type = self.shape_geo_type
         # sub.shape_geo_src = self.shape_geo_src
         # sub.shape_geo_scale = self.shape_geo_scale
         # sub.shape_materials = self.shape_materials
-
+        #
         # sub.spring_indices = self.spring_indices
         # sub.spring_rest_length = self.spring_rest_length
         # sub.spring_stiffness = self.spring_stiffness
@@ -1234,12 +1302,12 @@ class Model:
         # sub.tet_poses = self.tet_poses
         # sub.tet_activations = self.tet_activations
         # sub.tet_materials = self.tet_materials
-
+        #
         # sub.body_X_cm = self.body_X_cm
         # sub.body_I_m = self.body_I_m
-
+        #
         # sub.articulation_start = self.articulation_start
-
+        #
         # sub.joint_q = self.joint_q
         # sub.joint_qd = self.joint_qd
         # sub.joint_type = self.joint_type
@@ -1253,7 +1321,7 @@ class Model:
         # sub.joint_target_ke = self.joint_target_ke
         # sub.joint_target_kd = self.joint_target_kd
         # sub.joint_target = self.joint_target
-
+        #
         # sub.particle_count = self.particle_count
         # sub.joint_coord_count = self.joint_coord_count
         # sub.joint_dof_count = self.joint_dof_count
@@ -1264,14 +1332,14 @@ class Model:
         # sub.edge_count = self.edge_count
         # sub.spring_count = self.spring_count
         # sub.contact_count = self.contact_count
-
+        #
         # sub.gravity = self.gravity
         # sub.contact_distance = self.contact_distance
         # sub.contact_ke = self.contact_ke
         # sub.contact_kd = self.contact_kd
         # sub.contact_kf = self.contact_kf
         # sub.contact_mu = self.contact_mu
-
+        #
         # sub.tri_ke = self.tri_ke
         # sub.tri_ka = self.tri_ka
         # sub.tri_kd = self.tri_kd
@@ -1284,7 +1352,7 @@ class Model:
         #
         # sub.particle_radius = self.particle_radius
         # sub.adapter = self.adapter
-
+        #
         # sub.muscle_start = self.muscle_start
         # sub.muscle_params = self.muscle_params
         # sub.muscle_links = self.muscle_links
@@ -1294,7 +1362,7 @@ class Model:
         # sub.J_size = self.J_size
         # sub.M_size = self.M_size
         # sub.H_size = self.H_size
-
+        #
         # sub.articulation_joint_start = self.articulation_joint_start
         # sub.articulation_J_start = self.articulation_J_start
         # sub.articulation_M_start = self.articulation_M_start
@@ -1305,12 +1373,12 @@ class Model:
         # sub.articulation_J_cols = self.articulation_J_cols
         # sub.articulation_dof_start = self.articulation_dof_start
         # sub.articulation_coord_start = self.articulation_coord_start
-
+        #
         # sub.joint_limit_lower = self.joint_limit_lower
         # sub.joint_limit_upper = self.joint_limit_upper
         # sub.joint_limit_ke = self.joint_limit_ke
         # sub.joint_limit_kd = self.joint_limit_kd
-
+        #
         # sub.articulation_count = self.articulation_count
         # sub.muscle_count = self.muscle_count
         #
@@ -1318,13 +1386,13 @@ class Model:
         # sub.geo_sdfs = self.geo_sdfs
         # sub.ground = self.ground
         # sub.enable_tri_collisions = self.enable_tri_collisions
-
+        #
         # sub.M = self.M
         # sub.J = self.J
         # sub.P = self.P
         # sub.H = self.H
         # sub.L = self.L
-
+        #
         # sub.contact_body0 = self.contact_body0
         # sub.contact_body1 = self.contact_body1
         # sub.contact_point0 = self.contact_point0
