@@ -166,6 +166,99 @@ class DFlexEnv:
     def stochastic_init_func(self, env_ids):
         pass
 
+    def print_model_info(self):
+        """
+        Pretty–print the structure of a dflex Model.
+        Designed to behave like the old warp-based helper while coping
+        with dflex’s slightly different / occasionally missing fields.
+        """
+        import numpy as np
+        import torch
+
+        m = self.model  # shortcut
+        to_np = lambda x: None if x is None else x.detach().cpu().numpy()
+
+        # ───────────────────────────────────────── top-level counts
+        print("\n=== Model information (dflex) ===")
+        print(f"particles : {getattr(m, 'particle_count', 'n/a')}")
+        print(f"links     : {getattr(m, 'link_count', 'n/a')}")
+        print(f"joints    : {len(m.joint_type) if m.joint_type is not None else 'n/a'}")
+        print(f"shapes    : {getattr(m, 'shape_count', 'n/a')}")
+
+        # ───────────────────────────────────────── joint information
+        if m.joint_type is None:
+            print("\n(No joint data)")
+            return
+
+        JT_NAMES = {
+            0: "PRISMATIC",
+            1: "REVOLUTE",
+            2: "BALL",
+            3: "FIXED",
+            4: "FREE",
+        }
+
+        jt = to_np(m.joint_type)
+        jp = to_np(m.joint_parent)
+        q_start = to_np(m.joint_q_start)
+        q_lower = to_np(m.joint_limit_lower)
+        q_upper = to_np(m.joint_limit_upper)
+        axis = to_np(m.joint_axis)
+        X_pj = to_np(m.joint_X_pj)
+        X_cm = to_np(m.joint_X_cm)
+
+        print("\n=== Joint information ===")
+        J = len(jt)
+        for j in range(J):
+            print(f"\nJoint {j}:")
+            jname = JT_NAMES.get(int(jt[j]), f"UNKNOWN({int(jt[j])})")
+            print(f"  type   : {jname}")
+            parent = int(jp[j]) if jp is not None else -1
+            print(f"  parent : body {parent if parent >= 0 else 'world'}")
+            print(f"  child  : body {j}")  # child index = link index in dflex
+
+            # transforms
+            if X_pj is not None:
+                tp, rp = X_pj[j][:3], X_pj[j][3:]
+                print(f"  X_pj (parent→joint) t={tp.tolist()}, r={rp.tolist()}")
+            if X_cm is not None:
+                tc, rc = X_cm[j][:3], X_cm[j][3:]
+                print(f"  X_cm (child COM)    t={tc.tolist()}, r={rc.tolist()}")
+
+            # limits
+            if q_start is not None and q_lower is not None:
+                start = q_start[j]
+                end = q_start[j + 1] if j + 1 < len(q_start) else len(q_lower)
+                if end > start:
+                    print("  limits :")
+                    for k in range(start, end):
+                        print(f"    coord {k - start}: [{q_lower[k]}, {q_upper[k]}]")
+                else:
+                    print("  limits : none")
+
+            # stored joint axis (one per joint in dflex)
+            if axis is not None:
+                print(f"  axis   : {axis[j].tolist()}")
+
+        # ───────────────────────────────────────── body information
+        body_I_m = to_np(getattr(m, 'body_I_m', None))
+        if body_I_m is not None:
+            print("\n=== Body information ===")
+            for b in range(len(body_I_m)):
+                inertia6 = body_I_m[b]
+                mass = inertia6[3, 3] if inertia6.shape[0] >= 4 else 0.0
+                inertia3 = inertia6[:3, :3]
+                inv_inertia3 = (
+                    np.zeros((3, 3)) if mass == 0 else
+                    (np.linalg.inv(inertia3) if np.linalg.det(inertia3) != 0 else np.zeros((3, 3)))
+                )
+                print(f"\nBody {b}:")
+                print(f"  mass   : {mass}")
+                print(f"  inertia:\n{inertia3}")
+                print(f"  invI   :\n{inv_inertia3}")
+        else:
+            print("\n(No per-body inertia data)")
+
     def _set_domain_randomization(self):
         """Randomise contact parameters during simulation rollouts
 
