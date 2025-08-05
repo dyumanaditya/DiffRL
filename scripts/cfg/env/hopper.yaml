@@ -60,14 +60,14 @@ mujoco:
 
 shac:
   actor_lr: 2e-3
-  critic_lr: 5e-4
+  critic_lr: 4e-3
   max_epochs: 500
   save_interval: 100
   target_critic_alpha: 0.99
   actor_mlp:
-    units: [400, 200, 100]
+    units: [128, 64, 32]
   critic_mlp:
-    units: [400, 200, 100]
+    units: [64, 64]
 
 ahac:
   actor_lr: 2e-3

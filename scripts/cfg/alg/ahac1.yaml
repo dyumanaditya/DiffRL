@@ -1,5 +1,6 @@
 _target_: shac.algorithms.ahac1.AHAC1
 _recursive_: False
+name: ahac1
 actor_config:
   _target_: shac.models.actor.ActorStochasticMLP
   units: ${resolve_child:[64,64],${env.shac.actor_mlp},units}

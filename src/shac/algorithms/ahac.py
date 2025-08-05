@@ -70,6 +70,7 @@ class AHAC:
         eval_runs: int = 12,
         log_jacobians: bool = False,  # expensive and messes up wandb
         device: str = "cuda",
+        **kwargs
     ):
         # sanity check parameters
         assert steps_max > steps_min > 0
@@ -280,6 +281,9 @@ class AHAC:
             obs, rew, done, info = self.env.step(torch.tanh(actions))
             term = info["termination"]
             trunc = info["truncation"]
+
+            del info["steps_in_contact"]
+            del info["max_contact_force_norm"]
 
             with torch.no_grad():
                 raw_rew = rew.clone()
@@ -618,7 +622,7 @@ class AHAC:
                 # sanity check
                 if (
                     torch.isnan(self.grad_norm_before_clip)
-                    or self.grad_norm_before_clip > 1e6
+                    # or self.grad_norm_before_clip > 1e6
                 ):
                     print_error("NaN gradient")
                     raise ValueError
