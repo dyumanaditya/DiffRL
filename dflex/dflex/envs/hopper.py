@@ -81,7 +81,7 @@ class HopperEnv(DFlexEnv):
             self.bundle_info = (
                 self.bundle,  # enable bundling
                 (("joint_act",), ("joint_q", "joint_qd")),  # what to disturb / what to average
-                kwargs.get("bundle_noise_idx", None), None,  # which DOFs inside those tensors to add noise to/average
+                kwargs.get("bundle_noise_idx", [3, 4, 5]), None,  # which DOFs inside those tensors to add noise to/average
                 kwargs.get("num_samples"), kwargs.get("sigma"),  # how many Monte-Carlo shots and σ of the noise
                 kwargs.get("bundle_seed", 0),  # seed for the bundle
                 device
