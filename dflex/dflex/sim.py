@@ -2392,8 +2392,8 @@ class SimulateFunc(torch.autograd.Function):
             # state_out = model.state()
 
             # state_in_clone = state_in.clone()
-            # state_in_clone = model.state()  # Create new state for cloning
-            state_in_clone = state_in.clone()
+            state_in_clone = model.state()  # Create new state for cloning
+            # state_in_clone = state_in.clone()
             # state_in_clone = state_in
             # ctx.outputs.extend([
             #     state_in_clone.joint_q,
@@ -2581,7 +2581,7 @@ class SimulateFunc(torch.autograd.Function):
 
         # ctx.outputs is simple the output of a single step simulation
         ctx.outputs = df.to_weak_list(state_out.flatten())
-        ctx.outputs.extend(df.to_weak_list(state_in.flatten()))
+        # ctx.outputs.extend(df.to_weak_list(state_in.flatten()))
         return tuple(state_out.flatten())
 
     @staticmethod
