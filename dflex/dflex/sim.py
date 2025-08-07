@@ -2603,7 +2603,7 @@ class SemiImplicitIntegrator:
                             generator=self.noise_gen,  # works
                         ) * sigma
 
-                    bundle_controls[:, idx] += noise
+                        bundle_controls[:, idx] += noise
 
                     # number of envs and links for the *subset*
                     num_envs_sub = len(env_ids_in_contact)
