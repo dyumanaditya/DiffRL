@@ -126,8 +126,25 @@ def train(cfg: DictConfig):
         create_wandb_run(cfg.wandb, cfg_full)
 
     # patch code to make jobs log in the correct directory when doing multirun
-    logdir = HydraConfig.get()["runtime"]["output_dir"]
-    logdir = os.path.join(logdir, cfg.general.logdir)
+    # logdir = HydraConfig.get()["runtime"]["output_dir"]
+    # main_logdir = cfg.general.logdir
+    # logdir = os.path.join(main_logdir, logdir, "logs")
+    # print(logdir, main_logdir)
+
+    # 1) your base “main” log-dir from your config
+    main_logdir = cfg.general.logdir
+
+    # 2) get now’s date & time strings
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d")  # e.g. "2025-08-07"
+    time_str = now.strftime("%H-%M-%S")  # e.g. "14-30-05"
+
+    # 3) compose <main_logdir>/<date>/<time>/logs
+    logdir = os.path.join("outputs", main_logdir, date_str, time_str, "logs")
+
+    # 4) make sure it exists
+    os.makedirs(logdir, exist_ok=True)
+    print(f"Writing logs to: {logdir}")
 
     seeding(cfg.general.seed)
 

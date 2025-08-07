@@ -210,7 +210,7 @@ class AntEnv(DFlexEnv):
         if self.model.ground:
             self.model.collide(self.state)
 
-        self.print_model_info()
+        # self.print_model_info()
 
     def unscale_act(self, action):
         return action * self.action_strength
