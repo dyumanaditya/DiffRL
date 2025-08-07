@@ -2321,7 +2321,8 @@ class SimulateFunc(torch.autograd.Function):
 
         # Collect contact data to determine which links were in contact with the ground
         in_contact = torch.zeros(num_envs, dtype=torch.int, device=actuation.device)
-        
+        bodies_in_contact = torch.tensor(bodies_in_contact).to(torch.long)
+
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
@@ -2700,6 +2701,7 @@ class SemiImplicitIntegrator:
                             self.bundle_info,
                             num_envs_sub,
                             link_count_sub,
+                            bodies_in_contact,
                             *inputs
                         )
 
