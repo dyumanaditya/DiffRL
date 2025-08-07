@@ -23,6 +23,7 @@ config:
   num_samples: 10
   sigma: 10.0
   bundle_seed: 0
+  bundle_noise_idx: [5]  # Which joint to add noise to
 
   contact:
     ke: 2e4  # Nominal stiffness for elastic contact
