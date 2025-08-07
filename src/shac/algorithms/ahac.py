@@ -270,6 +270,8 @@ class AHAC:
 
         # keeps track of the current length of the rollout
         rollout_len = torch.zeros((self.num_envs,), device=self.device)
+        # Track actual steps taken for step_count consistency
+        actual_steps_taken = 0
         # Start short horizon rollout
         for i in range(self.steps_num):
             # collect data for critic training
@@ -308,6 +310,7 @@ class AHAC:
 
             self.episode_length += 1
             rollout_len += 1
+            actual_steps_taken += self.num_envs  # Each step processes all environments
 
             # contact truncation
             # defaults to jacobian truncation if they are available, otherwise
@@ -438,7 +441,11 @@ class AHAC:
 
         self.actor_loss = actor_loss.detach().item()
 
-        self.step_count += self.steps_num * self.num_envs
+        # Update step_count with actual steps taken instead of horizon length
+        self.step_count += actual_steps_taken
+        
+        # Alternative: Use steps_max for consistent step counting (uncomment if preferred)
+        # self.step_count += self.steps_max * self.num_envs
 
         if (
             self.log_jacobians
