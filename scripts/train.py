@@ -1,4 +1,4 @@
-import hydra, os, wandb, yaml
+import hydra, os, wandb, yaml, shutil
 from IPython.core import ultratb
 from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
@@ -145,6 +145,38 @@ def train(cfg: DictConfig):
     # 4) make sure it exists
     os.makedirs(logdir, exist_ok=True)
     print(f"Writing logs to: {logdir}")
+
+    # 5) Copy everything from Hydra's output directory to the parent of our log directory
+    # This ensures that both the SHAC policies/logs and Hydra files are in the same directory structure
+    # Get Hydra's output directory
+    hydra_output_dir = HydraConfig.get().run.dir
+    if hydra_output_dir and os.path.exists(hydra_output_dir):
+        # Copy everything from Hydra's output directory to the parent of our log directory
+        target_dir = os.path.dirname(logdir)  # This is logdir/..
+
+        # Copy all files and subdirectories recursively
+        for item in os.listdir(hydra_output_dir):
+            src_path = os.path.join(hydra_output_dir, item)
+            dst_path = os.path.join(target_dir, item)
+            
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dst_path)
+            elif os.path.isdir(src_path):
+                if os.path.exists(dst_path):
+                    # If directory exists, copy contents
+                    for subitem in os.listdir(src_path):
+                        sub_src = os.path.join(src_path, subitem)
+                        sub_dst = os.path.join(dst_path, subitem)
+                        if os.path.isfile(sub_src):
+                            shutil.copy2(sub_src, sub_dst)
+                            print(f"Copied file: {subitem} to {dst_path}")
+                        elif os.path.isdir(sub_src):
+                            shutil.copytree(sub_src, sub_dst, dirs_exist_ok=True)
+                            print(f"Copied directory: {subitem} to {dst_path}")
+                else:
+                    # If directory doesn't exist, copy the whole directory
+                    shutil.copytree(src_path, dst_path)
+                    print(f"Copied directory: {item} to {target_dir}")
 
     seeding(cfg.general.seed)
 
