@@ -2728,8 +2728,8 @@ class SemiImplicitIntegrator:
                     state_out.joint_q = joint_q.view(-1)
                     state_out.joint_qd = joint_qd.view(-1)
 
-            else:
-                num_steps_in_contact.append(0)
+            # else:
+            #     num_steps_in_contact.append(0)
             # # global g_state_out
             # state_out = g_state_out
             # g_state_out = None  # null reference
