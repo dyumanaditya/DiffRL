@@ -137,7 +137,7 @@ def train(cfg: DictConfig):
     # 2) get now’s date & time strings
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")  # e.g. "2025-08-07"
-    time_str = now.strftime("%H-%M-%S")  # e.g. "14-30-05"
+    time_str = now.strftime("%H-%M-%S.%f")  # e.g. "14-30-05"
 
     # 3) compose <main_logdir>/<date>/<time>/logs
     logdir = os.path.join("outputs", main_logdir, date_str, time_str, "logs")
