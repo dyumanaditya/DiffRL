@@ -2727,20 +2727,33 @@ class SemiImplicitIntegrator:
                         # clone state to avoid inplace accumulation across samples
                         s_in = state_in_sub.clone()
 
-                        # perturb the state
                         with torch.no_grad():
                             j_qd = s_in.joint_qd.view(num_envs_sub, D).clone()
 
-                            # per-env noise ONLY on the selected columns
-                            noise = torch.randn(
+                            # current values on the selected columns
+                            cur = j_qd[:, idx]
+
+                            # sign of current values (+1, 0, -1)
+                            cur_sign = torch.sign(cur)
+
+                            # treat zeros (choose a direction; here we make zeros behave like positives)
+                            cur_sign = torch.where(cur_sign == 0,
+                                                   torch.ones_like(cur_sign),
+                                                   cur_sign)
+
+                            # magnitude of noise (always >= 0), same dtype/device/generator as j_qd
+                            noise_mag = torch.abs(torch.randn(
                                 num_envs_sub, idx.numel(),
                                 dtype=j_qd.dtype,
                                 device=j_qd.device,
                                 generator=self.noise_gen,
-                            ) * sigma
+                            )) * sigma
 
-                            # keep full shape, modify only chosen columns
-                            j_qd[:, idx] += noise
+                            # force noise to be opposite to current value
+                            noise = -cur_sign * noise_mag
+
+                            # apply only to selected columns, keep full shape
+                            j_qd[:, idx] = cur + noise
 
                             s_in.joint_qd = j_qd.reshape(-1)
 
