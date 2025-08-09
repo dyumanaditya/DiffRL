@@ -2274,7 +2274,6 @@ def eval_rigid_integrate(
 g_state_out = None
 envs_in_contact = None
 num_steps_in_contact = []
-contact_forces = []
 
 
 # define PyTorch autograd op to wrap simulate func
@@ -2326,6 +2325,8 @@ class SimulateFunc(torch.autograd.Function):
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
+        stiff_contact_threshold = 1e4  # Threshold for considering a contact as stiff
+        stiff_env_mask = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
 
         # simulate
         for i in range(substeps):
@@ -2359,7 +2360,16 @@ class SimulateFunc(torch.autograd.Function):
                 contact_force_norms = torch.norm(state_out.contact_f[:, 3:], dim=1)  # Only force part (last 3 components)
                 current_max_contact_norm = torch.max(contact_force_norms).item()
                 total_max_contact_force_norm = max(total_max_contact_force_norm, current_max_contact_norm)
-                
+
+                contact_forces = state_out.contact_f[:, 3:]
+                force_norms = torch.norm(contact_forces, dim=1)
+                links_per_env = contact_forces.shape[0] // num_envs
+                force_norms_per_env = force_norms.view(num_envs, links_per_env)
+                max_force_norms_per_env = torch.max(force_norms_per_env, dim=1)[0]
+
+                stiff_this_step = (max_force_norms_per_env > stiff_contact_threshold) & n_hits
+                stiff_env_mask |= stiff_this_step
+
                 # Check if there was contact in this substep
                 has_contact = torch.any(contact_count > 0.0).item()
                 if has_contact:
@@ -2369,7 +2379,8 @@ class SimulateFunc(torch.autograd.Function):
             state_in = state_out
 
         global envs_in_contact
-        envs_in_contact = torch.nonzero(in_contact).squeeze(1)
+        # envs_in_contact = torch.nonzero(in_contact).squeeze(1)
+        envs_in_contact = torch.nonzero(stiff_env_mask, as_tuple=False).squeeze(-1)
 
         # print("final state")
         # print(state_out.joint_q)
@@ -2526,7 +2537,6 @@ class SemiImplicitIntegrator:
             global g_state_out
             global envs_in_contact
             global num_steps_in_contact
-            global contact_forces
 
             # get list of inputs and outputs for PyTorch tensor tracking
             inputs = [*state_in.flatten(), *model.flatten()]
@@ -2603,7 +2613,27 @@ class SemiImplicitIntegrator:
                             generator=self.noise_gen,  # works
                         ) * sigma
 
-                        bundle_controls[:, idx] += noise
+                        # direction opposite to current control
+                        direction = -torch.sign(bundle_controls[:, idx])  # {-1, 0, +1}
+
+                        # if control is exactly 0, choose a random ±1 direction
+                        zero_mask = direction == 0
+                        if zero_mask.any():
+                            rnd = torch.randint(
+                                0, 2, direction.shape,
+                                device=bundle_controls.device,
+                                generator=self.noise_gen,
+                                dtype=torch.int64,
+                            ).to(bundle_controls.dtype)  # {0,1} -> float
+                            rnd = rnd.mul_(2).sub_(1)  # -> {-1, +1}
+                            direction = torch.where(zero_mask, rnd, direction)
+
+                        # apply opposite-direction noise (use absolute magnitude)
+                        signed_noise = direction.to(noise.dtype) * noise.abs()
+
+                        bundle_controls[:, idx] += signed_noise
+
+                        # bundle_controls[:, idx] += noise
 
                     # number of envs and links for the *subset*
                     num_envs_sub = len(env_ids_in_contact)
