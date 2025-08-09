@@ -2770,16 +2770,16 @@ class SemiImplicitIntegrator:
                     final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
                     final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
 
-                    print("Before merge")
-                    print("joint_q", joint_q)
-                    print("joint_qd", joint_qd)
+                    # print("Before merge")
+                    # print("joint_q", joint_q)
+                    # print("joint_qd", joint_qd)
 
                     joint_q[env_ids_in_contact] = final_joint_q_sub
                     joint_qd[env_ids_in_contact] = final_joint_qd_sub
 
-                    print("After merge")
-                    print("joint_q", joint_q)
-                    print("joint_qd", joint_qd)
+                    # print("After merge")
+                    # print("joint_q", joint_q)
+                    # print("joint_qd", joint_qd)
 
                     # Flatten back to original shape
                     state_out.joint_q = joint_q.view(-1)
