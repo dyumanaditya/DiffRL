@@ -2325,7 +2325,7 @@ class SimulateFunc(torch.autograd.Function):
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
-        stiff_contact_threshold = 1e4  # Threshold for considering a contact as stiff
+        stiff_contact_threshold = 7e3  # Threshold for considering a contact as stiff
         stiff_env_mask = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
 
         # simulate
@@ -2605,35 +2605,38 @@ class SemiImplicitIntegrator:
                         idx = torch.arange(
                             bundle_controls.shape[1], device=bundle_controls.device
                         )
-                    with torch.no_grad():
-                        noise = torch.randn(
-                            num_samples, idx.numel(),
-                            dtype=bundle_controls.dtype,
-                            device=bundle_controls.device,
-                            generator=self.noise_gen,  # works
-                        ) * sigma
-
-                        # direction opposite to current control
-                        direction = -torch.sign(bundle_controls[:, idx])  # {-1, 0, +1}
-
-                        # if control is exactly 0, choose a random ±1 direction
-                        zero_mask = direction == 0
-                        if zero_mask.any():
-                            rnd = torch.randint(
-                                0, 2, direction.shape,
-                                device=bundle_controls.device,
-                                generator=self.noise_gen,
-                                dtype=torch.int64,
-                            ).to(bundle_controls.dtype)  # {0,1} -> float
-                            rnd = rnd.mul_(2).sub_(1)  # -> {-1, +1}
-                            direction = torch.where(zero_mask, rnd, direction)
-
-                        # apply opposite-direction noise (use absolute magnitude)
-                        signed_noise = direction.to(noise.dtype) * noise.abs()
-
-                    bundle_controls[:, idx] += signed_noise
-
-                    # bundle_controls[:, idx] += noise
+                    # with torch.no_grad():
+                    #     noise = torch.randn(
+                    #         num_samples, idx.numel(),
+                    #         dtype=bundle_controls.dtype,
+                    #         device=bundle_controls.device,
+                    #         generator=self.noise_gen,  # works
+                    #     ) * sigma
+                    #
+                    #     # direction opposite to current control
+                    #     direction = -torch.sign(bundle_controls[:, idx])  # {-1, 0, +1}
+                    #
+                    #     # if control is exactly 0, choose a random ±1 direction
+                    #     zero_mask = direction == 0
+                    #     if zero_mask.any():
+                    #         rnd = torch.randint(
+                    #             0, 2, direction.shape,
+                    #             device=bundle_controls.device,
+                    #             generator=self.noise_gen,
+                    #             dtype=torch.int64,
+                    #         ).to(bundle_controls.dtype)  # {0,1} -> float
+                    #         rnd = rnd.mul_(2).sub_(1)  # -> {-1, +1}
+                    #         direction = torch.where(zero_mask, rnd, direction)
+                    #
+                    #     # apply opposite-direction noise (use absolute magnitude)
+                    #     signed_noise = direction.to(noise.dtype) * noise.abs()
+                    #
+                    # # # bundle_controls[:, idx] += signed_noise
+                    # # print("before noise")
+                    # # print("bundle_controls", bundle_controls[:, idx])
+                    # # bundle_controls[:, idx] += noise
+                    # # print("after noise")
+                    # # print("bundle_controls", bundle_controls[:, idx])
 
                     # number of envs and links for the *subset*
                     num_envs_sub = len(env_ids_in_contact)
@@ -2711,7 +2714,22 @@ class SemiImplicitIntegrator:
                     for sample in range(num_samples):
                         # clone state to avoid inplace accumulation across samples
                         s_in = state_in_sub.clone()
-                        s_in.joint_act = bundle_controls[sample]
+                        # s_in.joint_act = bundle_controls[sample]
+
+                        # perturb the state
+                        with torch.no_grad():
+                            noise = torch.randn(
+                                idx.numel(),
+                                dtype=bundle_controls.dtype,
+                                device=bundle_controls.device,
+                                generator=self.noise_gen,  # works
+                            ) * sigma
+
+                            # print("state in before")
+                            # print(s_in.joint_qd)
+                            s_in.joint_qd += noise
+                            # print("state in after")
+                            # print(s_in.joint_qd)
 
                         m = model_sub.clone()  # simulate only the sub-model
 
@@ -2751,8 +2769,16 @@ class SemiImplicitIntegrator:
                     final_joint_q_sub = final_joint_q_sub.view(len(env_ids_in_contact), -1)
                     final_joint_qd_sub = final_joint_qd_sub.view(len(env_ids_in_contact), -1)
 
+                    print("Before merge")
+                    print("joint_q", joint_q)
+                    print("joint_qd", joint_qd)
+
                     joint_q[env_ids_in_contact] = final_joint_q_sub
                     joint_qd[env_ids_in_contact] = final_joint_qd_sub
+
+                    print("After merge")
+                    print("joint_q", joint_q)
+                    print("joint_qd", joint_qd)
 
                     # Flatten back to original shape
                     state_out.joint_q = joint_q.view(-1)
