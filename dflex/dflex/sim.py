@@ -2727,7 +2727,8 @@ class SemiImplicitIntegrator:
 
                             # print("state in before")
                             # print(s_in.joint_qd)
-                            s_in.joint_qd += noise
+                            j_qd = s_in.joint_qd.view(num_envs_sub, -1) + noise
+                            s_in.joint_qd = j_qd.view(-1)
                             # print("state in after")
                             # print(s_in.joint_qd)
 
