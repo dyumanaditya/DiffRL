@@ -2598,13 +2598,13 @@ class SemiImplicitIntegrator:
                     ]
                     bundle_controls = torch.stack(bundle_control, dim=0).to(dtype=torch.float32, device=model.adapter)
 
-                    # Add gaussian noise to the controls
-                    if noise_idx is not None:
-                        idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
-                    else:
-                        idx = torch.arange(
-                            bundle_controls.shape[1], device=bundle_controls.device
-                        )
+                    # # Add gaussian noise to the controls
+                    # if noise_idx is not None:
+                    #     idx = torch.as_tensor(noise_idx, device=bundle_controls.device)
+                    # else:
+                    #     idx = torch.arange(
+                    #         bundle_controls.shape[1], device=bundle_controls.device
+                    #     )
                     # with torch.no_grad():
                     #     noise = torch.randn(
                     #         num_samples, idx.numel(),
@@ -2711,26 +2711,38 @@ class SemiImplicitIntegrator:
                     # state_out.joint_q = joint_q_full.view(-1)
                     # state_out.joint_qd = joint_qd_full.view(-1)
 
+                    # pick columns to perturb
+                    D = state_in_sub.joint_qd.numel() // num_envs_sub
+                    if noise_idx is not None:
+                        idx = torch.as_tensor(noise_idx, device=state_in_sub.joint_qd.device,
+                                              dtype=torch.long).flatten()
+                    else:
+                        idx = torch.arange(D, device=state_in_sub.joint_qd.device, dtype=torch.long)
+
+                    # (optional) sanity checks
+                    if (idx < 0).any() or (idx >= D).any():
+                        raise ValueError(f"indices {idx.tolist()} out of range 0..{D - 1}")
+
                     for sample in range(num_samples):
                         # clone state to avoid inplace accumulation across samples
                         s_in = state_in_sub.clone()
-                        # s_in.joint_act = bundle_controls[sample]
 
                         # perturb the state
                         with torch.no_grad():
+                            j_qd = s_in.joint_qd.view(num_envs_sub, D).clone()
+
+                            # per-env noise ONLY on the selected columns
                             noise = torch.randn(
-                                idx.numel(),
-                                dtype=bundle_controls.dtype,
-                                device=bundle_controls.device,
-                                generator=self.noise_gen,  # works
+                                num_envs_sub, idx.numel(),
+                                dtype=j_qd.dtype,
+                                device=j_qd.device,
+                                generator=self.noise_gen,
                             ) * sigma
 
-                            # print("state in before")
-                            # print(s_in.joint_qd)
-                            j_qd = s_in.joint_qd.view(num_envs_sub, -1) + noise
-                            s_in.joint_qd = j_qd.view(-1)
-                            # print("state in after")
-                            # print(s_in.joint_qd)
+                            # keep full shape, modify only chosen columns
+                            j_qd[:, idx] += noise
+
+                            s_in.joint_qd = j_qd.reshape(-1)
 
                         m = model_sub.clone()  # simulate only the sub-model
 
