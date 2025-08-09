@@ -2631,9 +2631,9 @@ class SemiImplicitIntegrator:
                         # apply opposite-direction noise (use absolute magnitude)
                         signed_noise = direction.to(noise.dtype) * noise.abs()
 
-                        bundle_controls[:, idx] += signed_noise
+                    bundle_controls[:, idx] += signed_noise
 
-                        # bundle_controls[:, idx] += noise
+                    # bundle_controls[:, idx] += noise
 
                     # number of envs and links for the *subset*
                     num_envs_sub = len(env_ids_in_contact)
