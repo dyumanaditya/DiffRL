@@ -85,13 +85,14 @@ ahac:
 ppo:
   max_epochs: 500
   lr: 5e-4
-  minibatch_size: 32768
-  num_actors: 4096
+  minibatch_size: 8192
+  num_actors: 1024
   horizon_length: 32
   save_frequency: 50
   save_best_after: 50
   actor_mlp:
-    units: [400, 200, 100]
+#    units: [400, 200, 100]
+    units: [128, 64, 32]
 
 sac:
   max_epochs: 500
