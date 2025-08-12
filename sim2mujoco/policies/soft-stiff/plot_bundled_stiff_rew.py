@@ -48,22 +48,37 @@ def plot_three_runs(paths, tag, smooth_window, output_path):
     sns.set()
     plt.figure(figsize=(10, 6))
     labels = [os.path.basename(p.rstrip('/')) for p in paths]
-    for path, label in zip(paths, labels):
+    labels = ["SHAC Low Stiffness", "SHAC High Stiffness + Bundle", "SHAC High Stiffness"]
+    for i, (path, label) in enumerate(zip(paths, labels)):
         df = load_rewards(path, tag)
         steps = df.index.values
         values = df['reward'].values
         # apply rolling average if requested
         if smooth_window > 1:
             values = pd.Series(values).rolling(window=smooth_window, min_periods=1, center=True).mean().values
-        sns.lineplot(x=steps, y=values, label=label)
+        if i == 2:
+            sns.lineplot(x=steps, y=values, label=label, color='red')
+        elif i == 1:
+            sns.lineplot(x=steps, y=values, label=label, color='C2')
+        else:
+            sns.lineplot(x=steps, y=values, label=label)
 
     # format x-axis ticks in millions
     ax = plt.gca()
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{int(x/1e6)}M" if x >= 1e6 else f"{int(x)}"))
-    plt.xlabel('Training Step')
-    plt.ylabel(tag.capitalize())
-    plt.title(f"Training {tag.capitalize()} Curves for Three Runs")
-    plt.legend()
+    plt.xlabel('Step', fontsize=12)
+    plt.ylabel("Reward", fontsize=12)
+    # plt.title(f"Training {tag.capitalize()} Curves for Three Runs")
+    # plt.legend(fontsize=22)
+    # Legend below the x-axis label
+    ax.legend(
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.09),  # push below the axes
+        ncol=3,
+        frameon=False,
+        fontsize=12
+    )
+    ax.tick_params(axis='both', which='major', labelsize=10)
     plt.tight_layout()
     plt.savefig(output_path)
     plt.show()
