@@ -2752,6 +2752,15 @@ class SemiImplicitIntegrator:
                             # force noise to be opposite to current value
                             noise = -cur_sign * noise_mag
 
+                            # # magnitude of noise (always >= 0), same dtype/device/generator as j_qd
+                            # noise = torch.randn(
+                            #     num_envs_sub, idx.numel(),
+                            #     dtype=j_qd.dtype,
+                            #     device=j_qd.device,
+                            #     generator=self.noise_gen,
+                            # ) * sigma
+
+
                             # apply only to selected columns, keep full shape
                             j_qd[:, idx] = cur + noise
 
