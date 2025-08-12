@@ -339,7 +339,16 @@ class SHAC:
 
             # sanity check
             if (~torch.isfinite(real_obs)).sum() > 0:
-                print_error("Got inf obs")
+                # print_error("Got inf obs")
+                print_warning("Got inf obs")
+                print("shape", real_obs.shape)
+                mask_inf = ~torch.isfinite(real_obs)
+                if mask_inf.any():
+                    idx = torch.nonzero(mask_inf, as_tuple=False)
+                    for coord in idx.tolist():
+                        coord = tuple(coord)
+                        v = real_obs[coord].item()
+                        print_warning(f"Got inf obs at index {coord}: value={v}")
                 # raise ValueError # it's ok to have this for humanoid
 
             if self.obs_rms is not None:

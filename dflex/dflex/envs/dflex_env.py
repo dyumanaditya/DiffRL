@@ -385,8 +385,8 @@ class DFlexEnv:
         self.progress_buf += 1
         self.num_frames += 1
 
-        rew = self.calculate_reward(self.obs_buf, actions)
         self.obs_buf = self.observation_from_state(self.state)
+        rew = self.calculate_reward(self.obs_buf, actions)
 
         # Reset environments if agent has ended in a bad state based on heuristics
         termination = self.compute_termination(self.obs_buf, actions)

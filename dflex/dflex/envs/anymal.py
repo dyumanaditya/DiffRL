@@ -54,6 +54,7 @@ class AnymalEnv(DFlexEnv):
     ):
         num_obs = 49
         num_act = 12
+        self.playback_speed = 0.005
 
         super(AnymalEnv, self).__init__(
             num_envs,
@@ -154,10 +155,11 @@ class AnymalEnv(DFlexEnv):
         start_height = 0.55
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
-        filename = "anymal_c/urdf/anymal_minimal.urdf"
+        # filename = "anymal_c/urdf/anymal_minimal.urdf"
+        filename = "anymal_c/urdf/anymal.urdf"
         now = time.time()
         # load URDF here for faster env initialisation when running many paralle envs
-        robot = urchin.URDF.load(os.path.join(asset_folder, filename), lazy_load_meshes=True)
+        robot = urchin.URDF.load(os.path.join(asset_folder, filename), lazy_load_meshes=False)
         for i in range(self.num_environments):
             start_pos = (0.0, start_height, 0.0 + self.env_dist * i)
             lu.urdf_load(
