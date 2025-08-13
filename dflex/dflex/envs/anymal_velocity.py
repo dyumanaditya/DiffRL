@@ -246,10 +246,10 @@ class AnymalVelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                # stiffness=85.0,  # from config
-                # damping=2.0,  # from config
-                stiffness=300.0,  # from config
-                damping=10.0,  # from config
+                stiffness=85.0,  # from config
+                damping=2.0,  # from config
+                # stiffness=1000.0,  # from config
+                # damping=10.0,  # from config
                 shape_ke=2.0e3,
                 shape_kd=5.0e2,
                 shape_kf=1.0e2,
@@ -296,6 +296,30 @@ class AnymalVelocityEnv(DFlexEnv):
         target_joint_positions = action + self.default_joint_pos
 
         # TODO: clamp target_joint_positions to joint limits
+        # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
+        # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
+        jcount = target_joint_positions.shape[1]  # expected 12
+        lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
+        upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
+
+        # Compute inner (soft) bounds centered in the range
+        soft = self.soft_limit_ratio
+        # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
+        half_range = 0.5 * (upper - lower)
+        margin = (1.0 - soft) * half_range
+        inner_lower = lower + margin
+        inner_upper = upper - margin
+
+        # If any joint has no finite limits, leave it unchanged
+        finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
+        # Clamp into the soft range (torch.clamp supports tensor min/max)
+        clamped = torch.where(
+            finite,
+            torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
+            target_joint_positions,
+        )
+
+        target_joint_positions = clamped
 
         print("TARGETS")
         print(target_joint_positions)
