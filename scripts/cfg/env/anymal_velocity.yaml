@@ -32,13 +32,17 @@ shac:
 ppo:
   max_epochs: 5000
   lr: 1e-3
-  minibatch_size: 32768
+  minibatch_size: 24576
   num_actors: 4096
-  horizon_length: 32
+  horizon_length: 24
   save_frequency: 100
   save_best_after: 100
   actor_mlp:
     units: [128, 128, 128]
+  scale_value: 0.6
+  kl_threshold: 0.01
+  critic_coef: 2.0
+  bounds_loss_coef: 0.0
 
 sac:
   max_epochs: 5000

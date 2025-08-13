@@ -93,7 +93,7 @@ class AnymalVelocityEnv(DFlexEnv):
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
         self.feet_air_time_reward_scale = 0.5
-        self.undesired_contact_reward_scale = -1.0
+        self.undesired_contact_reward_scale = -4.0
         self.flat_orientation_reward_scale = -5.0
 
         # Early termination parameters
