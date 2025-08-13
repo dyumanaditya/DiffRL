@@ -248,16 +248,16 @@ class AnymalVelocityEnv(DFlexEnv):
                 floating=True,
                 # stiffness=85.0,  # from config
                 # damping=2.0,  # from config
-                stiffness=800.0,  # from config
+                stiffness=300.0,  # from config
                 damping=10.0,  # from config
                 shape_ke=2.0e3,
                 shape_kd=5.0e2,
                 shape_kf=1.0e2,
                 shape_mu=0.75,
-                # limit_ke=1.0e3,
-                # limit_kd=1.0e1,
-                limit_ke=0.0,
-                limit_kd=0.0,
+                limit_ke=1.0e3,
+                limit_kd=1.0e1,
+                # limit_ke=0.0,
+                # limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
