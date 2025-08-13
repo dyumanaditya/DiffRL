@@ -10,7 +10,7 @@ config:
   MM_caching_frequency: 16
   early_termination: True
   nan_state_fix: True
-  termination_height: 0.1
+  termination_height: 0.2
   action_penalty: -5e-3
   up_rew_scale: 0.1
   heading_rew_scale: 1.0
@@ -31,7 +31,7 @@ shac:
 
 ppo:
   max_epochs: 5000
-  lr: 5e-4
+  lr: 1e-3
   minibatch_size: 32768
   num_actors: 4096
   horizon_length: 32

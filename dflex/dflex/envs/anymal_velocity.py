@@ -135,7 +135,7 @@ class AnymalVelocityEnv(DFlexEnv):
 
     def sample_commands(self, env_ids):
         """Sample new velocity commands for specified environments"""
-        # Sample linear velocity commands (x, y) and angular velocity (z)
+        # Sample linear velocity commands (x, z) and angular velocity (y)
         # Following IsaacLab pattern: uniform distribution between -1 and 1
         self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
         
@@ -249,8 +249,10 @@ class AnymalVelocityEnv(DFlexEnv):
                 shape_kd=5.0e2,
                 shape_kf=1.0e2,
                 shape_mu=0.75,
-                limit_ke=1.0e3,
-                limit_kd=1.0e1,
+                # limit_ke=1.0e3,
+                # limit_kd=1.0e1,
+                limit_ke=0.0,
+                limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
@@ -275,10 +277,19 @@ class AnymalVelocityEnv(DFlexEnv):
         if self.model.ground:
             self.model.collide(self.state)
 
+    def step(self, actions, play=False):
+        obs, rew, done, extras = super().step(actions, play)
+        # print("Commands", self._commands)
+        return obs, rew, done, extras
+
     def unscale_act(self, action):
         return action * self.action_scale
 
     def set_act(self, action):
+        # print("action")
+        # print(action)
+        # print(action.shape)
+        # print()
         self._actions = action.clone() / self.action_scale  # Because we scaled already earlier
 
         # # Convert action to target joint positions
@@ -294,9 +305,8 @@ class AnymalVelocityEnv(DFlexEnv):
         # Convert action to target joint positions
         target_joint_positions = action + self.default_joint_pos
 
-        # Set joint targets on the model (this affects all environments)
-        # Skip base pose indices 0-6, set targets for joint indices 7-18
-        self.model.joint_target[6:18] = target_joint_positions[0]  # Use first env as template
+        # Set joint targets on the model (shape num_envs * 7+12)
+        self.model.joint_target.view(self.num_envs, -1)[:, 7:] = target_joint_positions
 
         # Clear joint actuation
         self.state.joint_act.view(self.num_envs, -1)[:, 6:] = 0.0
@@ -407,18 +417,34 @@ class AnymalVelocityEnv(DFlexEnv):
         joint_pos = state.joint_q.view(self.num_envs, -1)[:, 7:].clone()
         joint_vel = state.joint_qd.view(self.num_envs, -1)[:, 6:].clone()
 
+
+
         # Torso height
         torso_height = torso_pos[:, 1].clone()
 
         # Velocity in body frame
-        lin_vel_b = lin_vel.clone()
-        ang_vel_b = ang_vel.clone()
+        # lin_vel_b = lin_vel.clone()
+        # ang_vel_b = ang_vel.clone()
+        torso_quat = tu.quat_mul(torso_rot, self.inv_start_rot)
+        lin_vel_b = tu.quat_rotate_inverse(torso_quat, lin_vel)  # world -> body
+        ang_vel_b = tu.quat_rotate_inverse(torso_quat, ang_vel)
 
         # Project gravity in body frame
         # Gravity vector in world frame (always points down)
-        torso_quat = tu.quat_mul(torso_rot, self.inv_start_rot)
         g_world = -self.y_unit_tensor
         projected_gravity_b = tu.quat_rotate_inverse(torso_quat, g_world)
+
+        # print("OBSERVATIONS")
+        # print("lin vel", lin_vel_b)
+        # print("ang vel", ang_vel_b)
+        # print("projected g", projected_gravity_b)
+        # print("commands", self._commands)
+        # print("joint pos", joint_pos)
+        # print("default joint pos - joint pos", joint_pos - self.default_joint_pos)
+        # print("joint vel", joint_vel)
+        # print("torso height", torso_height)
+        # print()
+
 
         obs = torch.cat(
             [
@@ -510,7 +536,7 @@ class AnymalVelocityEnv(DFlexEnv):
         joint_accel = self.state.joint_qdd.view(self.num_envs, -1)[:, 6:]
 
         # Linear velocity tracking
-        lin_vel_error = torch.sum(torch.square(commands[:, :2] - lin_vel_b[:, :2]), dim=1)
+        lin_vel_error = torch.sum(torch.square(commands[:, :2] - lin_vel_b[:, [0, 2]]), dim=1)
         lin_vel_error_mapped = torch.exp(-lin_vel_error / 0.25)
         # Yaw rate tracking
         yaw_rate_error = torch.square(commands[:, 2] - ang_vel_b[:, 1])
@@ -563,6 +589,11 @@ class AnymalVelocityEnv(DFlexEnv):
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
+
+        # print("REWARDS")
+        # for key, value in rewards.items():
+        #     print(f"{key}: {value}")
+        # print()
 
         # Store previous action here because it is called after get obs
         self._previous_actions = self._actions.clone()
