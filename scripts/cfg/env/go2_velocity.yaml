@@ -1,6 +1,6 @@
 name: df_anymal
 config:
-  _target_: dflex.envs.AnymalEnv
+  _target_: dflex.envs.Go2VelocityEnv
   render: ${general.render}
   device: ${general.device}
   num_envs: 128
@@ -18,25 +18,31 @@ config:
 
 shac:
   actor_lr: 2e-3
-  critic_lr: 5e-4
+  critic_lr: 2e-3
   max_epochs: 3000
   save_interval: 500
   target_critic_alpha: 0.99
   actor_mlp:
-    units: [400, 200, 100]
+    units: [256, 128]
+#    units: [400, 200, 100]
   critic_mlp:
-    units: [400, 200, 100]
+    units: [64, 64]
+#    units: [400, 200, 100]
 
 ppo:
-  max_epochs: 5000
-  lr: 5e-4
-  minibatch_size: 32768
+  max_epochs: 500
+  lr: 1e-4
+  minibatch_size: 24576
   num_actors: 4096
-  horizon_length: 32
-  save_frequency: 500
-  save_best_after: 500
+  horizon_length: 24
+  save_frequency: 100
+  save_best_after: 100
   actor_mlp:
-    units: [400, 200, 100]
+    units: [128, 128, 128]
+  scale_value: 0.6
+  kl_threshold: 0.01
+  critic_coef: 2.0
+  bounds_loss_coef: 0.0
 
 sac:
   max_epochs: 5000

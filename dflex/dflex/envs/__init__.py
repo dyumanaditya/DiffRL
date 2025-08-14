@@ -8,6 +8,7 @@
 from .ant import AntEnv
 from .anymal import AnymalEnv
 from .anymal_velocity import AnymalVelocityEnv
+from .go2_velocity import Go2VelocityEnv
 from .cartpole_swing_up import CartPoleSwingUpEnv
 from .cheetah import CheetahEnv
 from .dflex_env import DFlexEnv
