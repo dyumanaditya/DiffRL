@@ -85,7 +85,7 @@ class Go2VelocityEnv(DFlexEnv):
         # Rewards: Following IsaacLab reward structure
         self.lin_vel_reward_scale = 5.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 2.5
+        self.yaw_rate_reward_scale = 3.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -2.0
         self.ang_vel_reward_scale = -0.05
@@ -247,9 +247,9 @@ class Go2VelocityEnv(DFlexEnv):
                 damping=2.0,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
-                shape_ke=2.0e4,
-                shape_kd=5.0e3,
-                shape_kf=1.0e3,
+                shape_ke=2.0e3,
+                shape_kd=5.0e2,
+                shape_kf=1.0e2,
                 shape_mu=1.0,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
