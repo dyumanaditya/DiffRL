@@ -27,10 +27,9 @@ except ImportError:
             MUJOCO_VIEWER_TYPE = "none"
 
 
-class AnymalVelocityMujocoEnv:
+class Go2VelocityMujocoEnv:
     """
-    Anymal velocity tracking environment using Mujoco
-    Mirrors the DFlex AnymalVelocityEnv structure
+    Go2 velocity tracking environment using Mujoco
     """
 
     def __init__(
@@ -40,7 +39,7 @@ class AnymalVelocityMujocoEnv:
         episode_length=1000,
         stochastic_init=False,
         early_termination=True,
-        termination_height=0.25,
+        termination_height=0.10,
         action_penalty=-0.005,
         up_rew_scale=0.1,
         heading_rew_scale=1.0,
@@ -91,18 +90,18 @@ class AnymalVelocityMujocoEnv:
         
         # Default joint positions (matching DFlex) - ensure consistent dtype
         self.default_joint_pos = torch.tensor([
-            0.03,  # LF_HAA
-            0.4,   # LF_HFE
-            -0.8,  # LF_KFE
-            -0.03, # RF_HAA
-            0.4,   # RF_HFE
-            -0.8,  # RF_KFE
-            0.03,  # LH_HAA
-            -0.4,  # LH_HFE
-            0.8,   # LH_KFE
-            -0.03, # RH_HAA
-            -0.4,  # RH_HFE
-            0.8,   # RH_KFE
+            -0.1,  # RR_hip_joint
+            1.0,  # RR_thigh_joint
+            -1.5,  # RR_calf_joint
+            0.1,  # RL_hip_joint
+            1.0,  # RL_thigh_joint
+            -1.5,  # RL_calf_joint
+            -0.1,  # FR_hip_joint
+            0.8,  # FR_thigh_joint
+            -1.5,  # FR_calf_joint
+            0.1,  # FL_hip_joint
+            0.8,  # FL_thigh_joint
+            -1.5,  # FL_calf_joint
         ], dtype=self.dtype, device=self.device)
         
         # Episode logging - ensure consistent dtype
@@ -128,7 +127,7 @@ class AnymalVelocityMujocoEnv:
         self._current_step = 0
         
         # Feet contact links (matching DFlex)
-        self.feet_contact_links = [46, 56, 66, 76]  # LF, RF, LH, RH
+        self.feet_contact_links = [11, 20, 29, 38]  # FL, FR, RL, RR
         
         # Initialize Mujoco
         self._init_mujoco()
@@ -150,9 +149,8 @@ class AnymalVelocityMujocoEnv:
 
     def _init_mujoco(self):
         """Initialize Mujoco model and data"""
-        # Load the XML file
-        # xml_path = os.path.join(os.path.dirname(__file__), 'assets', 'anybotics_anymal_c', 'anymal_c.xml')
-        xml_path = os.path.join(os.path.dirname(__file__), 'assets', 'anybotics_anymal_c', 'scene.xml')
+        # Load the XML file with position actuators instead of motors
+        xml_path = os.path.join(os.path.dirname(__file__), 'assets', 'unitree_go2', 'scene.xml')
         
         # Load model
         self.model = mujoco.MjModel.from_xml_path(xml_path)
@@ -211,7 +209,7 @@ class AnymalVelocityMujocoEnv:
     def _set_initial_state(self):
         """Set initial state for the robot"""
         # Set initial position (floating base)
-        self.data.qpos[:3] = [0.0, 0.0, 0.65]  # x, y, z
+        self.data.qpos[:3] = [0.0, 0.0, 0.40]  # x, y, z
         
         # Set initial orientation (quaternion)
         self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
@@ -357,7 +355,6 @@ class AnymalVelocityMujocoEnv:
 
     def _get_observation(self):
         """Get observation from MuJoCo state and reproduce DFLEX-style observations."""
-        import math
         dtype = self.dtype
         device = self.device
         N = self.num_envs
@@ -395,11 +392,11 @@ class AnymalVelocityMujocoEnv:
         lin_vel_b = tu.quat_rotate_inverse(torso_quat, lin_vel_df_w)
         ang_vel_b = tu.quat_rotate_inverse(torso_quat, ang_vel_df_w)
 
-        print("lin vel before projection", lin_vel_df_w)
-        print("lin vel after projection", lin_vel_b)
-        print("ang vel before projection", ang_vel_df_w)
-        print("ang vel after projection", ang_vel_b)
-        print()
+        # print("lin vel before projection", lin_vel_df_w)
+        # print("lin vel after projection", lin_vel_b)
+        # print("ang vel before projection", ang_vel_df_w)
+        # print("ang vel after projection", ang_vel_b)
+        # print()
 
         # Gravity in DFLEX world points DOWN along -Y
         y_unit = torch.tensor([0.0, 1.0, 0.0], dtype=dtype, device=device)
@@ -419,18 +416,18 @@ class AnymalVelocityMujocoEnv:
         if joint_pos.shape[1] != default_joint_pos.shape[1]:
             joint_pos = joint_pos[:, : default_joint_pos.shape[1]]
             joint_vel = joint_vel[:, : default_joint_pos.shape[1]]
-
-        print("OBSERVATIONS")
-        print("lin vel", lin_vel_b)
-        print("ang vel", ang_vel_b)
-        print("projected g", projected_gravity_b)
-        print("commands", self._commands)
-        print("joint pos", joint_pos)
-        print("joint vel", joint_vel)
-        print("actions", self._actions)
-        print("torso height", torso_height)
-        print("torso pos", torso_pos_df_w)
-        print()
+        #
+        # print("OBSERVATIONS")
+        # print("lin vel", lin_vel_b)
+        # print("ang vel", ang_vel_b)
+        # print("projected g", projected_gravity_b)
+        # print("commands", self._commands)
+        # print("joint pos", joint_pos)
+        # print("joint vel", joint_vel)
+        # print("actions", self._actions)
+        # print("torso height", torso_height)
+        # print("torso pos", torso_pos_df_w)
+        # print()
 
         # ----- 6) Build obs exactly like DFLEX -----
         obs = torch.cat(
