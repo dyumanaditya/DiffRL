@@ -92,9 +92,9 @@ class Go2VelocityEnv(DFlexEnv):
         self.joint_torque_reward_scale = -1e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
-        self.feet_air_time_reward_scale = 0.25
-        self.undesired_contact_reward_scale = -1.0
-        self.flat_orientation_reward_scale = -2.5
+        self.feet_air_time_reward_scale = 0.1
+        self.undesired_contact_reward_scale = -2.0
+        self.flat_orientation_reward_scale = -3.5
 
         # Early termination parameters
         self.termination_height = termination_height
@@ -584,7 +584,7 @@ class Go2VelocityEnv(DFlexEnv):
         # feet air time - compute using our contact tracking
         feet_air_times = self.feet_air_time()  # This updates tracking and returns current air times
         # Reward feet that have been in air for around 0.5 seconds (encourage trotting gait)
-        air_time = torch.sum((feet_air_times - 0.3) * (feet_air_times > 0.0), dim=1) * (
+        air_time = torch.sum((feet_air_times - 0.5) * (feet_air_times > 0.0), dim=1) * (
                 torch.norm(self._commands[:, :2], dim=1) > 0.1
         )
 
@@ -610,9 +610,9 @@ class Go2VelocityEnv(DFlexEnv):
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.yaw_rate_reward_scale * self.sim_dt,
             "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
             "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
-            # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
-            # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
-            # "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
+            "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
+            "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
+            "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
             "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
