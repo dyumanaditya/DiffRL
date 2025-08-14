@@ -83,16 +83,16 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        self.lin_vel_reward_scale = 3.0
+        self.lin_vel_reward_scale = 5.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 1.5
+        self.yaw_rate_reward_scale = 2.5
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -2.0
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -1e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
-        self.feet_air_time_reward_scale = 0.1
+        self.feet_air_time_reward_scale = 0.0
         self.undesired_contact_reward_scale = -2.0
         self.flat_orientation_reward_scale = -3.5
 
@@ -225,7 +225,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.40
+        start_height = 0.48
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
