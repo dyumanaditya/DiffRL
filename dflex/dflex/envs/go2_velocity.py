@@ -83,10 +83,10 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        # self.lin_vel_reward_scale = 5.0
-        self.lin_vel_reward_scale = 1.0
-        # self.yaw_rate_reward_scale = 2.0
-        self.yaw_rate_reward_scale = 0.5
+        self.lin_vel_reward_scale = 3.0
+        # self.lin_vel_reward_scale = 1.0
+        self.yaw_rate_reward_scale = 1.5
+        # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -2.0
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -1e-5
@@ -132,7 +132,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
 
         self.setup_visualizer(logdir)
-        self.print_model_info()
+        # self.print_model_info()
 
     def sample_commands(self, env_ids):
         """Sample new velocity commands for specified environments"""
@@ -225,7 +225,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.55
+        start_height = 0.40
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
@@ -584,7 +584,7 @@ class Go2VelocityEnv(DFlexEnv):
         # feet air time - compute using our contact tracking
         feet_air_times = self.feet_air_time()  # This updates tracking and returns current air times
         # Reward feet that have been in air for around 0.5 seconds (encourage trotting gait)
-        air_time = torch.sum((feet_air_times - 0.5) * (feet_air_times > 0.0), dim=1) * (
+        air_time = torch.sum((feet_air_times - 0.3) * (feet_air_times > 0.0), dim=1) * (
                 torch.norm(self._commands[:, :2], dim=1) > 0.1
         )
 
