@@ -10,7 +10,7 @@ config:
   MM_caching_frequency: 16
   early_termination: True
   nan_state_fix: True
-  termination_height: 0.25
+  termination_height: 0.28
   action_penalty: -5e-3
   up_rew_scale: 0.1
   heading_rew_scale: 1.0
