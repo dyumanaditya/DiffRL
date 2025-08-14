@@ -248,14 +248,14 @@ class AnymalVelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=85.0,  # from config
+                stiffness=120.0,  # from config
                 damping=2.0,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
-                shape_ke=2.0e3,
-                shape_kd=5.0e2,
-                shape_kf=1.0e2,
-                shape_mu=0.75,
+                shape_ke=2.0e4,
+                shape_kd=5.0e3,
+                shape_kf=1.0e3,
+                shape_mu=1.0,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
                 # limit_ke=0.0,
