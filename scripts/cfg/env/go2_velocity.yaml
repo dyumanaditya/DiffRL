@@ -17,6 +17,12 @@ config:
   heigh_rew_scale: 1.0
   wandb: False
 
+  contact:
+    ke: 1e4  # Nominal stiffness for elastic contact
+    kd: 8e3  # Nominal damping for elastic contact
+    kf: 1e3  # Nominal friction for elastic contact
+    mu: 0.65  # Nominal friction coefficient for elastic contact
+
 mujoco:
   config:
     # Sim-to-sim transfer to mujoco

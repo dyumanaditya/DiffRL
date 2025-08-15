@@ -70,7 +70,7 @@ class Go2VelocityMujocoEnv:
         self.dtype = torch.float32  # Ensure consistent dtype
         
         # Action scaling
-        self.action_scale = 1.0
+        self.action_scale = 0.5
         
         # Velocity tracking parameters - ensure consistent dtype
         self._commands = torch.zeros(self.num_envs, 3, dtype=self.dtype, device=self.device)
@@ -226,7 +226,7 @@ class Go2VelocityMujocoEnv:
     def _set_initial_state(self):
         """Set initial state for the robot"""
         # Set initial position (floating base)
-        self.data.qpos[:3] = [0.0, 0.0, 0.35]  # x, y, z
+        self.data.qpos[:3] = [0.0, 0.0, 0.38]  # x, y, z
         
         # Set initial orientation (quaternion)
         self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
@@ -309,32 +309,33 @@ class Go2VelocityMujocoEnv:
         
         # Convert action to target joint positions
         target_joint_positions = action + self.default_joint_pos
-        # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
-        # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
-        jcount = target_joint_positions.shape[1]  # expected 12
-        lower = torch.tensor([lim[0] for lim in self.joint_limits], device=self.device)
-        upper = torch.tensor([lim[1] for lim in self.joint_limits], device=self.device)
-        # lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
-        # upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
 
-        # Compute inner (soft) bounds centered in the range
-        soft = self.soft_limit_ratio
-        # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
-        half_range = 0.5 * (upper - lower)
-        margin = (1.0 - soft) * half_range
-        inner_lower = lower + margin
-        inner_upper = upper - margin
-
-        # If any joint has no finite limits, leave it unchanged
-        finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
-        # Clamp into the soft range (torch.clamp supports tensor min/max)
-        clamped = torch.where(
-            finite,
-            torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
-            target_joint_positions,
-        )
-
-        target_joint_positions = clamped
+        # # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
+        # # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
+        # jcount = target_joint_positions.shape[1]  # expected 12
+        # lower = torch.tensor([lim[0] for lim in self.joint_limits], device=self.device)
+        # upper = torch.tensor([lim[1] for lim in self.joint_limits], device=self.device)
+        # # lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
+        # # upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
+        #
+        # # Compute inner (soft) bounds centered in the range
+        # soft = self.soft_limit_ratio
+        # # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
+        # half_range = 0.5 * (upper - lower)
+        # margin = (1.0 - soft) * half_range
+        # inner_lower = lower + margin
+        # inner_upper = upper - margin
+        #
+        # # If any joint has no finite limits, leave it unchanged
+        # finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
+        # # Clamp into the soft range (torch.clamp supports tensor min/max)
+        # clamped = torch.where(
+        #     finite,
+        #     torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
+        #     target_joint_positions,
+        # )
+        #
+        # target_joint_positions = clamped
         
         # Apply action to Mujoco
         self._apply_action(target_joint_positions)
