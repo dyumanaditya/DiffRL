@@ -26,6 +26,14 @@ np.set_printoptions(precision=5, linewidth=256, suppress=True)
 import dflex.envs.load_utils as lu
 import dflex.envs.torch_utils as tu
 
+# Import wandb if available
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available. Install with 'pip install wandb' to enable logging.")
+
 
 class Go2VelocityEnv(DFlexEnv):
     """
@@ -51,6 +59,7 @@ class Go2VelocityEnv(DFlexEnv):
         up_rew_scale=0.1,
         heading_rew_scale=1.0,
         heigh_rew_scale=1.0,
+        wandb=False,
     ):
         num_obs = 49
         num_act = 12
@@ -72,6 +81,12 @@ class Go2VelocityEnv(DFlexEnv):
         )
 
         self.early_termination = early_termination
+        self.wandb_enabled = wandb and WANDB_AVAILABLE
+        
+        # Initialize wandb if enabled
+        if self.wandb_enabled:
+            self._init_wandb()
+            
         self.init_sim()
 
         # MDP parameters
@@ -132,7 +147,25 @@ class Go2VelocityEnv(DFlexEnv):
         self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
 
         self.setup_visualizer(logdir)
-        # self.print_model_info()
+        self.print_model_info()
+
+    def _init_wandb(self):
+        """Initialize wandb for logging"""
+        try:
+            wandb.init(
+                project="go2-velocity-env",
+                name="go2-velocity-training",
+                config={
+                    "num_envs": self.num_envs,
+                    "episode_length": self.episode_length,
+                    "dt": self.dt,
+                    "sim_substeps": self.sim_substeps,
+                }
+            )
+            print("Wandb initialized successfully for Go2 velocity environment")
+        except Exception as e:
+            print(f"Failed to initialize wandb: {e}")
+            self.wandb_enabled = False
 
     def sample_commands(self, env_ids):
         """Sample new velocity commands for specified environments"""
@@ -281,6 +314,21 @@ class Go2VelocityEnv(DFlexEnv):
 
     def step(self, actions, play=False):
         obs, rew, done, extras = super().step(actions, play)
+        
+        # Increment step counter for wandb logging
+        self._current_step += 1
+        
+        # Log step information to wandb if enabled
+        if self.wandb_enabled:
+            try:
+                wandb.log({
+                    "env/step": self._current_step,
+                    "env/episode_progress": (self._current_step % self.episode_length) / self.episode_length
+                }, step=self._current_step)
+            except Exception as e:
+                print(f"Failed to log step info to wandb: {e}")
+                self.wandb_enabled = False
+        
         # print("Commands", self._commands)
         return obs, rew, done, extras
 
@@ -348,6 +396,22 @@ class Go2VelocityEnv(DFlexEnv):
 
         if self.early_termination:
             termination = termination | (obs[:, 48] < self.termination_height)
+            
+        # Log termination statistics to wandb if enabled
+        if self.wandb_enabled and termination.any():
+            try:
+                termination_reasons = {
+                    "termination/nonfinite_obs": nonfinite_mask.sum().item(),
+                    "termination/invalid_joint_q": (torch.abs(joint_q) > 1e6).sum().item(),
+                    "termination/invalid_joint_qd": (torch.abs(joint_qd) > 1e6).sum().item(),
+                    "termination/height": (obs[:, 48] < self.termination_height).sum().item() if self.early_termination else 0,
+                    "termination/total": termination.sum().item()
+                }
+                wandb.log(termination_reasons, step=self._current_step)
+            except Exception as e:
+                print(f"Failed to log termination info to wandb: {e}")
+                self.wandb_enabled = False
+                
         return termination
 
     def static_init_func(self, env_ids):
@@ -488,6 +552,29 @@ class Go2VelocityEnv(DFlexEnv):
             ],
             dim=-1,
         )
+        
+        # Log observation and action statistics to wandb if enabled
+        if self.wandb_enabled:
+            try:
+                obs_stats = {
+                    "obs/lin_vel_mean": lin_vel_b.mean().item(),
+                    "obs/lin_vel_std": lin_vel_b.std().item(),
+                    "obs/ang_vel_mean": ang_vel_b.mean().item(),
+                    "obs/ang_vel_std": ang_vel_b.std().item(),
+                    "obs/joint_pos_mean": joint_pos.mean().item(),
+                    "obs/joint_pos_std": joint_pos.std().item(),
+                    "obs/joint_vel_mean": joint_vel.mean().item(),
+                    "obs/joint_vel_std": joint_vel.std().item(),
+                    "obs/torso_height_mean": torso_height.mean().item(),
+                    "obs/torso_height_std": torso_height.std().item(),
+                    "action/mean": self._actions.mean().item(),
+                    "action/std": self._actions.std().item(),
+                }
+                wandb.log(obs_stats, step=self._current_step)
+            except Exception as e:
+                print(f"Failed to log observation/action stats to wandb: {e}")
+                self.wandb_enabled = False
+        
         return obs
 
     def feet_air_time(self):
@@ -630,9 +717,70 @@ class Go2VelocityEnv(DFlexEnv):
         # Logging
         for key, value in rewards.items():
             self._episode_sums[key] += value
+            
+        # Wandb logging if enabled
+        if self.wandb_enabled:
+            self._log_rewards_to_wandb(rewards, reward)
+            
         return reward
+
+    def _log_rewards_to_wandb(self, rewards, total_reward):
+        """Log rewards to wandb"""
+        try:
+            # Log total reward
+            wandb.log({"reward/total": total_reward.mean().item()}, step=self._current_step)
+            
+            # Log individual reward terms
+            for key, value in rewards.items():
+                wandb.log({f"reward/{key}": value.mean().item()}, step=self._current_step)
+                
+            # Log episode sums for tracking cumulative performance
+            for key, value in self._episode_sums.items():
+                wandb.log({f"episode_sum/{key}": value.mean().item()}, step=self._current_step)
+                
+        except Exception as e:
+            print(f"Failed to log to wandb: {e}")
+            # Disable wandb logging on error to avoid repeated failures
+            self.wandb_enabled = False
+
+    def enable_wandb_logging(self):
+        """Enable wandb logging if wandb is available"""
+        if WANDB_AVAILABLE and not self.wandb_enabled:
+            self._init_wandb()
+        elif not WANDB_AVAILABLE:
+            print("Warning: wandb not available. Install with 'pip install wandb' to enable logging.")
+
+    def disable_wandb_logging(self):
+        """Disable wandb logging"""
+        if self.wandb_enabled:
+            try:
+                wandb.finish()
+                self.wandb_enabled = False
+                print("Wandb logging disabled")
+            except Exception as e:
+                print(f"Failed to disable wandb: {e}")
 
     def reset_episode_stats(self, env_ids):
         """Reset episode statistics for specified environments"""
         for key in self._episode_sums.keys():
             self._episode_sums[key][env_ids] = 0.0
+            
+        # Log episode reset to wandb if enabled
+        if self.wandb_enabled:
+            try:
+                wandb.log({
+                    "env/episode_reset": len(env_ids),
+                    "env/active_envs": self.num_envs - len(env_ids)
+                }, step=self._current_step)
+            except Exception as e:
+                print(f"Failed to log episode reset to wandb: {e}")
+                self.wandb_enabled = False
+
+    def close(self):
+        """Close the environment and wandb logging"""
+        if self.wandb_enabled:
+            try:
+                wandb.finish()
+                print("Wandb logging finished")
+            except Exception as e:
+                print(f"Failed to close wandb: {e}")

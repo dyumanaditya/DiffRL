@@ -15,6 +15,7 @@ config:
   up_rew_scale: 0.1
   heading_rew_scale: 1.0
   heigh_rew_scale: 1.0
+  wandb: False
 
 mujoco:
   config:
