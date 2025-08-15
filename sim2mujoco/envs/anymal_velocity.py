@@ -59,8 +59,8 @@ class AnymalVelocityMujocoEnv:
         self.render_delay = render_delay
         
         # Set timestep to match DFlex (1/60 seconds per control step)
-        # self.dt = 1.0 / 60.0  # 0.01667 seconds
-        self.dt = 0.02
+        self.dt = 1.0 / 960.0  # 0.01667 seconds
+        # self.dt = 0.02
 
         # Step counter
         self.step_count = 0
@@ -159,7 +159,7 @@ class AnymalVelocityMujocoEnv:
         self.data = mujoco.MjData(self.model)
         
         # Set Mujoco timestep to match DFlex (1/60 seconds)
-        # self.model.opt.timestep = self.dt
+        self.model.opt.timestep = self.dt
         
         # Set initial state
         self._set_initial_state()
@@ -298,7 +298,8 @@ class AnymalVelocityMujocoEnv:
         self._apply_action(target_joint_positions)
         
         # Step simulation
-        mujoco.mj_step(self.model, self.data)
+        for i in range(16):
+            mujoco.mj_step(self.model, self.data)
         
         # Update viewer if rendering - do this after simulation step
         if self.render and hasattr(self, 'viewer'):

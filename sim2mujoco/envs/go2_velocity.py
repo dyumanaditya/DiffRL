@@ -3,6 +3,7 @@ import math
 import dflex as df
 import mujoco
 import torch
+import time
 import numpy as np
 import gymnasium as gym
 import dflex.envs.torch_utils as tu
@@ -58,8 +59,8 @@ class Go2VelocityMujocoEnv:
         self.render_delay = render_delay
         
         # Set timestep to match DFlex (1/60 seconds per control step)
-        # self.dt = 1.0 / 60.0  # 0.01667 seconds
-        self.dt = 0.02
+        self.dt = 1.0 / 960.0  # 0.01667 seconds
+        # self.dt = 0.001
 
         # Step counter
         self.step_count = 0
@@ -103,6 +104,22 @@ class Go2VelocityMujocoEnv:
             0.8,  # FL_thigh_joint
             -1.5,  # FL_calf_joint
         ], dtype=self.dtype, device=self.device)
+
+        self.joint_limits = [
+            (-1.0472, 1.0472),
+            (-0.5236, 4.5379),
+            (-2.7227, -0.83776),
+            (-1.0472, 1.0472),
+            (-0.5236, 4.5379),
+            (-2.7227, -0.83776),
+            (-1.0472, 1.0472),
+            (-1.5708, 3.4907),
+            (-2.7227, -0.83776),
+            (-1.0472, 1.0472),
+            (-1.5708, 3.4907),
+            (-2.7227, -0.83776)
+        ]
+        self.soft_limit_ratio = float(0.95)
         
         # Episode logging - ensure consistent dtype
         self._episode_sums = {
@@ -157,7 +174,7 @@ class Go2VelocityMujocoEnv:
         self.data = mujoco.MjData(self.model)
         
         # Set Mujoco timestep to match DFlex (1/60 seconds)
-        # self.model.opt.timestep = self.dt
+        self.model.opt.timestep = self.dt
         
         # Set initial state
         self._set_initial_state()
@@ -209,7 +226,7 @@ class Go2VelocityMujocoEnv:
     def _set_initial_state(self):
         """Set initial state for the robot"""
         # Set initial position (floating base)
-        self.data.qpos[:3] = [0.0, 0.0, 0.40]  # x, y, z
+        self.data.qpos[:3] = [0.0, 0.0, 0.35]  # x, y, z
         
         # Set initial orientation (quaternion)
         self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
@@ -288,22 +305,53 @@ class Go2VelocityMujocoEnv:
         
         action = torch.clamp(action, -1.0, 1.0)
         self._actions = action.clone()
+        action = self.action_scale * action  # Scale action
         
         # Convert action to target joint positions
         target_joint_positions = action + self.default_joint_pos
+        # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
+        # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
+        jcount = target_joint_positions.shape[1]  # expected 12
+        lower = torch.tensor([lim[0] for lim in self.joint_limits], device=self.device)
+        upper = torch.tensor([lim[1] for lim in self.joint_limits], device=self.device)
+        # lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
+        # upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
+
+        # Compute inner (soft) bounds centered in the range
+        soft = self.soft_limit_ratio
+        # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
+        half_range = 0.5 * (upper - lower)
+        margin = (1.0 - soft) * half_range
+        inner_lower = lower + margin
+        inner_upper = upper - margin
+
+        # If any joint has no finite limits, leave it unchanged
+        finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
+        # Clamp into the soft range (torch.clamp supports tensor min/max)
+        clamped = torch.where(
+            finite,
+            torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
+            target_joint_positions,
+        )
+
+        target_joint_positions = clamped
         
         # Apply action to Mujoco
         self._apply_action(target_joint_positions)
         
         # Step simulation
-        mujoco.mj_step(self.model, self.data)
+        # print(self.model.opt.timestep, self.dt)
+        # print(self.dt / self.model.opt.timestep)
+
+        for i in range(16):
+            mujoco.mj_step(self.model, self.data)
+            # time.sleep(0.01)
         
         # Update viewer if rendering - do this after simulation step
         if self.render and hasattr(self, 'viewer'):
             self._update_viewer()
             # Add small delay for visualization
             if self.render_delay > 0:
-                import time
                 time.sleep(self.render_delay)
                 # time.sleep(0.3)
 
