@@ -96,7 +96,7 @@ class Go2VelocityEnv(DFlexEnv):
         # Rewards: Following IsaacLab reward structure
         self.lin_vel_reward_scale = 8.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 4.0
+        self.yaw_rate_reward_scale = 1.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -4.0
         self.ang_vel_reward_scale = -0.05
@@ -269,7 +269,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.45
+        start_height = 0.40
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
@@ -287,12 +287,12 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=85.0,  # from config
-                damping=2.0,  # from config
+                stiffness=50.0,  # from config
+                damping=0.5,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
                 shape_ke=2.0e4,
-                shape_kd=5.0e3,
+                shape_kd=8.0e3,
                 shape_kf=1.0e3,
                 shape_mu=1.0,
                 limit_ke=1.0e3,
@@ -672,7 +672,7 @@ class Go2VelocityEnv(DFlexEnv):
         feet_contact_forces = contact_f[:, self.feet_contact_links, 3:]  # [:, :, 3:] gets force components
         
         # Check if any foot has significant contact force (norm > threshold)
-        contact_force_threshold = 0.1  # Same threshold as in feet_air_time()
+        contact_force_threshold = 1.0  # Same threshold as in feet_air_time()
         feet_contact_norms = torch.norm(feet_contact_forces, dim=-1)  # Norm of force vector for each foot
         feet_contact_current = feet_contact_norms > contact_force_threshold
         
@@ -723,7 +723,7 @@ class Go2VelocityEnv(DFlexEnv):
         
         # Calculate air time reward: (last_air_time - 0.5) * first_contact
         # This rewards feet that stay in air for ~0.5 seconds when they make contact
-        air_time_reward = torch.sum((self._last_air_time - 0.5) * (self._last_air_time > 0.0), dim=1)
+        air_time_reward = torch.sum((self._last_air_time - 0.4) * (self._last_air_time > 0.0), dim=1)
         
         # # Debug: Show air time rewards
         # if torch.any(self._last_air_time > 0.0):
