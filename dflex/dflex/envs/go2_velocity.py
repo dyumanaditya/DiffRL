@@ -797,6 +797,90 @@ class Go2VelocityEnv(DFlexEnv):
             for key, value in self._episode_sums.items():
                 wandb.log({f"episode_sum/{key}": value.mean().item()}, step=self._current_step)
                 
+            # Log velocity tracking errors
+            # Extract velocity tracking errors from observations
+            obs = self.obs_buf  # Current observations
+            if obs is not None and obs.shape[1] >= 12:
+                # Linear velocity tracking error (x and z components)
+                lin_vel_b = obs[:, :3]  # Body frame linear velocity
+                commands = obs[:, 9:12]  # Velocity commands
+                
+                # Linear velocity tracking error (x and z components)
+                lin_vel_x_error = torch.abs(commands[:, 0] - lin_vel_b[:, 0]).mean().item()
+                lin_vel_z_error = torch.abs(commands[:, 1] - lin_vel_b[:, 2]).mean().item()
+                
+                # Angular velocity tracking error (yaw rate)
+                ang_vel_b = obs[:, 3:6]  # Body frame angular velocity
+                yaw_rate_error = torch.abs(commands[:, 2] - ang_vel_b[:, 1]).mean().item()
+                
+                # Log velocity tracking errors
+                wandb.log({
+                    "velocity_tracking/lin_vel_x_error": lin_vel_x_error,
+                    "velocity_tracking/lin_vel_z_error": lin_vel_z_error,
+                    "velocity_tracking/yaw_rate_error": yaw_rate_error,
+                    "velocity_tracking/lin_vel_x_command": commands[:, 0].mean().item(),
+                    "velocity_tracking/lin_vel_z_command": commands[:, 1].mean().item(),
+                    "velocity_tracking/yaw_rate_command": commands[:, 2].mean().item(),
+                    "velocity_tracking/lin_vel_x_actual": lin_vel_b[:, 0].mean().item(),
+                    "velocity_tracking/lin_vel_z_actual": lin_vel_b[:, 2].mean().item(),
+                    "velocity_tracking/yaw_rate_actual": ang_vel_b[:, 1].mean().item(),
+                }, step=self._current_step)
+                
+                # Additional velocity tracking metrics
+                # Normalized errors (error / command magnitude when command is non-zero)
+                lin_vel_x_norm_error = torch.where(
+                    torch.abs(commands[:, 0]) > 0.1,
+                    torch.abs(commands[:, 0] - lin_vel_b[:, 0]) / (torch.abs(commands[:, 0]) + 1e-6),
+                    torch.zeros_like(commands[:, 0])
+                ).mean().item()
+                
+                lin_vel_z_norm_error = torch.where(
+                    torch.abs(commands[:, 1]) > 0.1,
+                    torch.abs(commands[:, 1] - lin_vel_b[:, 2]) / (torch.abs(commands[:, 1]) + 1e-6),
+                    torch.zeros_like(commands[:, 1])
+                ).mean().item()
+                
+                yaw_rate_norm_error = torch.where(
+                    torch.abs(commands[:, 2]) > 0.1,
+                    torch.abs(commands[:, 2] - ang_vel_b[:, 1]) / (torch.abs(commands[:, 2]) + 1e-6),
+                    torch.zeros_like(commands[:, 2])
+                ).mean().item()
+                
+                # Success rates (percentage of environments within error threshold)
+                error_threshold = 0.1  # 10% error threshold
+                lin_vel_x_success_rate = (torch.abs(commands[:, 0] - lin_vel_b[:, 0]) <= error_threshold * torch.abs(commands[:, 0])).float().mean().item()
+                lin_vel_z_success_rate = (torch.abs(commands[:, 1] - lin_vel_b[:, 2]) <= error_threshold * torch.abs(commands[:, 1])).float().mean().item()
+                yaw_rate_success_rate = (torch.abs(commands[:, 2] - ang_vel_b[:, 1]) <= error_threshold * torch.abs(commands[:, 2])).float().mean().item()
+                
+                # Log additional metrics
+                wandb.log({
+                    "velocity_tracking/lin_vel_x_norm_error": lin_vel_x_norm_error,
+                    "velocity_tracking/lin_vel_z_norm_error": lin_vel_z_norm_error,
+                    "velocity_tracking/yaw_rate_norm_error": yaw_rate_norm_error,
+                    "velocity_tracking/lin_vel_x_success_rate": lin_vel_x_success_rate,
+                    "velocity_tracking/lin_vel_z_success_rate": lin_vel_z_success_rate,
+                    "velocity_tracking/yaw_rate_success_rate": yaw_rate_success_rate,
+                }, step=self._current_step)
+                
+                # Aggregate velocity tracking statistics
+                # RMS errors across all environments
+                lin_vel_x_rms_error = torch.sqrt(torch.mean(torch.square(commands[:, 0] - lin_vel_b[:, 0]))).item()
+                lin_vel_z_rms_error = torch.sqrt(torch.mean(torch.square(commands[:, 1] - lin_vel_b[:, 2]))).item()
+                yaw_rate_rms_error = torch.sqrt(torch.mean(torch.square(commands[:, 2] - ang_vel_b[:, 1]))).item()
+                
+                # Overall velocity tracking performance
+                total_lin_vel_error = torch.sqrt(torch.mean(torch.square(commands[:, :2] - lin_vel_b[:, [0, 2]]))).item()
+                total_ang_vel_error = torch.sqrt(torch.mean(torch.square(commands[:, 2] - ang_vel_b[:, 1]))).item()
+                
+                # Log aggregate statistics
+                wandb.log({
+                    "velocity_tracking/lin_vel_x_rms_error": lin_vel_x_rms_error,
+                    "velocity_tracking/lin_vel_z_rms_error": lin_vel_z_rms_error,
+                    "velocity_tracking/yaw_rate_rms_error": yaw_rate_rms_error,
+                    "velocity_tracking/total_lin_vel_rms_error": total_lin_vel_error,
+                    "velocity_tracking/total_ang_vel_rms_error": total_ang_vel_error,
+                }, step=self._current_step)
+
         except Exception as e:
             print(f"Failed to log to wandb: {e}")
             # Disable wandb logging on error to avoid repeated failures
