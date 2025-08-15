@@ -86,7 +86,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 0.5
+        self.action_scale = 1.0
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -143,6 +143,7 @@ class Go2VelocityEnv(DFlexEnv):
         # all_body_indices = list(range(link_cnt))  # 0 to num_links-1
         # self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
         self.undesired_contact_body_links = [5, 14, 23, 32, 7, 16, 25, 34]     # Thigh, calf links
+        self.undesired_contact_body_links.extend([1, 2, 40, 41])               # Head and camera links
 
         self.setup_visualizer(logdir)
         # self.print_model_info()

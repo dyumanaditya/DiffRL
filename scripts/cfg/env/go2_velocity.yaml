@@ -42,7 +42,7 @@ shac:
 
 ppo:
   max_epochs: 500
-  lr: 1e-4
+  lr: 1e-3
   minibatch_size: 24576
   num_actors: 4096
   horizon_length: 24
