@@ -86,7 +86,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 2.0
+        self.action_scale = 0.5
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -94,9 +94,9 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        self.lin_vel_reward_scale = 8.0
+        self.lin_vel_reward_scale = 5.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 1.0
+        self.yaw_rate_reward_scale = 2.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -5.0
         self.ang_vel_reward_scale = -0.05
@@ -182,10 +182,10 @@ class Go2VelocityEnv(DFlexEnv):
         """Sample new velocity commands for specified environments"""
         # Sample linear velocity commands (x, z) and angular velocity (y)
         # Following IsaacLab pattern: uniform distribution between -1 and 1
-        # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-2.0, 2.0)
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
-            [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
-        )
+        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
+        #     [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
+        # )
 
         # Optionally scale commands to more realistic ranges
         # self._commands[env_ids, :2] *= 2.0  # Scale linear velocities
@@ -269,7 +269,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.40
+        start_height = 0.38
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
@@ -291,9 +291,9 @@ class Go2VelocityEnv(DFlexEnv):
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
-                shape_ke=2.0e3,
-                shape_kd=5.0e2,
-                shape_kf=1.0e2,
+                shape_ke=2.0e4,
+                shape_kd=5.0e3,
+                shape_kf=1.0e3,
                 shape_mu=1.0,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
