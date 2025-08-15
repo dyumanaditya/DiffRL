@@ -60,6 +60,7 @@ class Go2VelocityEnv(DFlexEnv):
         heading_rew_scale=1.0,
         heigh_rew_scale=1.0,
         wandb=False,
+        **kwargs
     ):
         num_obs = 49
         num_act = 12
@@ -78,10 +79,16 @@ class Go2VelocityEnv(DFlexEnv):
             stochastic_init,
             jacobian,
             device,
+            **kwargs
         )
 
         self.early_termination = early_termination
         self.wandb_enabled = wandb and WANDB_AVAILABLE
+
+        self.contact_ke = kwargs["contact"]["ke"]
+        self.contact_kd = kwargs["contact"]["kd"]
+        self.contact_kf = kwargs["contact"]["kf"]
+        self.contact_mu = kwargs["contact"]["mu"]
 
         self.init_sim()
 
@@ -94,9 +101,9 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        self.lin_vel_reward_scale = 5.0
+        self.lin_vel_reward_scale = 10.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 2.0
+        self.yaw_rate_reward_scale = 5.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -2.0
         self.ang_vel_reward_scale = -0.05
@@ -104,8 +111,8 @@ class Go2VelocityEnv(DFlexEnv):
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
         self.feet_air_time_reward_scale = 0.25
-        self.undesired_contact_reward_scale = -5.0
-        self.flat_orientation_reward_scale = -5.0
+        self.undesired_contact_reward_scale = -8.0
+        self.flat_orientation_reward_scale = -10.0
 
         # Early termination parameters
         self.termination_height = termination_height
@@ -270,7 +277,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.38
+        start_height = 0.35
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
@@ -292,10 +299,10 @@ class Go2VelocityEnv(DFlexEnv):
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
-                shape_ke=1.0e4,
-                shape_kd=8.0e3,
-                shape_kf=1.0e3,
-                shape_mu=0.65,
+                shape_ke=self.contact_ke,
+                shape_kd=self.contact_kd,
+                shape_kf=self.contact_kf,
+                shape_mu=self.contact_mu,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
                 # limit_ke=0.0,
@@ -316,6 +323,12 @@ class Go2VelocityEnv(DFlexEnv):
         self.model.gravity = torch.tensor(
             (0.0, -9.81, 0.0), dtype=torch.float32, device=self.device
         )
+
+        # Set ground contact
+        self.model.contact_ke = self.contact_ke
+        self.model.contact_kd = self.contact_kd
+        self.model.contact_kf = self.contact_kf
+        self.model.contact_mu = self.contact_mu
 
         self.integrator = df.sim.SemiImplicitIntegrator()
 
@@ -759,7 +772,7 @@ class Go2VelocityEnv(DFlexEnv):
             "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
             "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
             "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
