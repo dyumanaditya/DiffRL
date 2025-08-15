@@ -138,9 +138,10 @@ class Go2VelocityEnv(DFlexEnv):
         self.feet_contact_links = [11, 20, 29, 38]  # FL, FR, RL, RR
 
         # Get all body indices (excluding feet)
-        link_cnt = self.model.link_count // self.num_envs
-        all_body_indices = list(range(link_cnt))  # 0 to num_links-1
-        self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
+        # link_cnt = self.model.link_count // self.num_envs
+        # all_body_indices = list(range(link_cnt))  # 0 to num_links-1
+        # self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
+        self.undesired_contact_body_links = [5, 14, 23, 32]     # Thigh links
 
         self.setup_visualizer(logdir)
         # self.print_model_info()
