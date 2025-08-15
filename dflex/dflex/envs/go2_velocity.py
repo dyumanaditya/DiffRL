@@ -93,7 +93,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 0.5
+        self.action_scale = 1.0
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -103,7 +103,7 @@ class Go2VelocityEnv(DFlexEnv):
         # Rewards: Following IsaacLab reward structure
         self.lin_vel_reward_scale = 10.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 3.0
+        self.yaw_rate_reward_scale = 5.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -3.0
         self.ang_vel_reward_scale = -0.15
