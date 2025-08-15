@@ -131,7 +131,12 @@ class Go2VelocityEnv(DFlexEnv):
         self._feet_contact_history = torch.zeros((self.num_envs, 4), dtype=torch.bool, device=self.device)  # 4 feet
         self._feet_air_time_counter = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device)  # Time each foot has been in air
         self._feet_last_contact_step = torch.zeros((self.num_envs, 4), dtype=torch.long, device=self.device)  # Last step each foot was in contact
+        self._last_air_time = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device)  # Air time when feet last made contact
         self._current_step = 0
+        
+        # Debug: Print initial state
+        print(f"Initial feet_contact_history shape: {self._feet_contact_history.shape}")
+        print(f"Initial feet_contact_history: {self._feet_contact_history}")
 
         # Determined from print_model_info
         # These will be in contact with the ground
@@ -589,37 +594,66 @@ class Go2VelocityEnv(DFlexEnv):
 
     def feet_air_time(self):
         """Compute feet air time and update contact tracking"""
-        # Get contact information from simulation state
-        link_cnt = self.model.link_count // self.num_envs
-        contact_cnt = self.state.contact_count.view(self.num_envs, link_cnt)
-        
-        # Extract contact states for feet (indices 46, 56, 66, 76 from your feet_links)
-        # Note: These indices are 0-based, so we need to map them correctly
-        feet_contact_current = contact_cnt[:, self.feet_contact_links]
-        
+        # Get contact forces from simulation state
+        # contact_f has shape (num_envs * num_links, 6) where 6 = [torque_x, torque_y, torque_z, force_x, force_y, force_z]
+        contact_f = self.state.contact_f.view(self.num_envs, -1, 6)
+
+        # Extract contact forces for feet (only force components, not torque)
+        feet_contact_forces = contact_f[:, self.feet_contact_links, 3:]  # [:, :, 3:] gets force components
+
+        # Check if any foot has significant contact force (norm > threshold)
+        # Use a small threshold to detect contact
+        contact_force_threshold = 1.0  # Lower threshold to detect lighter contacts
+        feet_contact_norms = torch.norm(feet_contact_forces, dim=-1)  # Norm of force vector for each foot
+        feet_contact_current = feet_contact_norms > contact_force_threshold
+
         # Update air time counters
-        # If foot is NOT in contact (contact_count == 0), increment air time
-        # If foot IS in contact (contact_count > 0), reset air time
+        # If foot is NOT in contact (force < threshold), increment air time
+        # If foot IS in contact (force >= threshold), reset air time
         air_time_delta = self.dt  # Time step for this simulation step
         
         # Feet that are currently in air (not touching ground)
-        feet_in_air = feet_contact_current == 0
+        feet_in_air = ~feet_contact_current  # Negate contact state to get air state
+
+        # Isaac Gym approach: Track air time for feet that are in the air
+        # Only increment air time for feet that have touched the ground before
+        feet_eligible_for_air_time = feet_in_air & (self._feet_contact_history == True)
+        self._feet_air_time_counter[feet_eligible_for_air_time] += air_time_delta
         
-        # Increment air time for feet that are in air
-        self._feet_air_time_counter[feet_in_air] += air_time_delta
+        # Detect feet that just made contact (went from air to ground)
+        # This is the key insight: reward feet when they make contact based on air time
+        feet_just_contacted = feet_contact_current & (~feet_in_air)  # Currently in contact AND was in air previous step
         
-        # Reset air time for feet that just made contact
-        feet_just_contacted = (feet_contact_current > 0) & (self._feet_contact_history == False)
-        self._feet_air_time_counter[feet_just_contacted] = 0.0
+        # Store the air time when feet make contact (for reward calculation)
+        if feet_just_contacted.any():
+            # Get the air time that was accumulated before contact
+            air_time_at_contact = self._feet_air_time_counter.clone()
+            # Reset air time for feet that just made contact
+            self._feet_air_time_counter[feet_just_contacted] = 0.0
+            # Store the air time for reward calculation
+            self._last_air_time[feet_just_contacted] = air_time_at_contact[feet_just_contacted]
         
-        # Update contact history
-        self._feet_contact_history = feet_contact_current > 0
+        # Reset air time for feet that are currently in contact (touching ground)
+        # This ensures clean state for next air time accumulation
+        feet_in_contact = feet_contact_current
+        self._feet_air_time_counter[feet_in_contact] = 0.0
+        
+        # Track feet that just made contact for the first time (for contact history)
+        feet_first_contact = feet_contact_current & (~self._feet_contact_history)
+        
+        # Update contact history - only set to True when feet first make contact
+        # Don't reset to False when feet go back in air
+        # Use logical_or to ensure proper boolean operations
+        old_history = self._feet_contact_history.clone()
+        self._feet_contact_history = torch.logical_or(self._feet_contact_history, feet_contact_current)
+        
+        # # Debug: Print contact history changes
+        # if torch.any(old_history != self._feet_contact_history):
+        #     print(f"Contact history changed from {old_history} to {self._feet_contact_history}")
+        #     print(f"Feet that made contact: {feet_contact_current}")
         
         # Update last contact step for feet that just made contact
-        self._feet_last_contact_step[feet_just_contacted] = self._current_step
-        
-        # Increment step counter
-        self._current_step += 1
+        self._feet_last_contact_step[feet_first_contact] = self._current_step
         
         return self._feet_air_time_counter.clone()
 
@@ -635,16 +669,25 @@ class Go2VelocityEnv(DFlexEnv):
 
     def are_feet_in_contact(self):
         """Check which feet are currently in contact with the ground"""
-        link_cnt = self.model.link_count // self.num_envs
-        contact_cnt = self.state.contact_count.view(self.num_envs, link_cnt)
-        feet_contact_current = contact_cnt[:, self.feet_contact_links]
-        return feet_contact_current > 0  # Returns boolean tensor of shape (num_envs, 4)
+        # Get contact forces from simulation state
+        contact_f = self.state.contact_f.view(self.num_envs, -1, 6)
+        
+        # Extract contact forces for feet (only force components, not torque)
+        feet_contact_forces = contact_f[:, self.feet_contact_links, 3:]  # [:, :, 3:] gets force components
+        
+        # Check if any foot has significant contact force (norm > threshold)
+        contact_force_threshold = 0.1  # Same threshold as in feet_air_time()
+        feet_contact_norms = torch.norm(feet_contact_forces, dim=-1)  # Norm of force vector for each foot
+        feet_contact_current = feet_contact_norms > contact_force_threshold
+        
+        return feet_contact_current  # Returns boolean tensor of shape (num_envs, 4)
 
     def reset_contact_tracking(self, env_ids):
         """Reset contact tracking for specified environments"""
         self._feet_contact_history[env_ids] = False
         self._feet_air_time_counter[env_ids] = 0.0
         self._feet_last_contact_step[env_ids] = 0
+        self._last_air_time[env_ids] = 0.0
 
     def calculate_reward(self, obs, act):
         # Extract data from obs
@@ -677,13 +720,22 @@ class Go2VelocityEnv(DFlexEnv):
         joint_accel = torch.sum(torch.square(joint_accel), dim=1)
         # action rate
         action_rate = torch.sum(torch.square(actions - self._previous_actions), dim=1)
-        # feet air time
-        # feet air time - compute using our contact tracking
+        # feet air time - Isaac Gym approach
+        # Reward feet when they make contact based on how long they were in the air
+        # Target air time is 0.5 seconds - longer times get positive rewards, shorter get negative
         feet_air_times = self.feet_air_time()  # This updates tracking and returns current air times
-        # Reward feet that have been in air for around 0.5 seconds (encourage trotting gait)
-        air_time = torch.sum((feet_air_times - 0.5) * (feet_air_times > 0.0), dim=1) * (
-                torch.norm(self._commands[:, :2], dim=1) > 0.1
-        )
+        
+        # Calculate air time reward: (last_air_time - 0.5) * first_contact
+        # This rewards feet that stay in air for ~0.5 seconds when they make contact
+        air_time_reward = torch.sum((self._last_air_time - 0.5) * (self._last_air_time > 0.0), dim=1)
+        
+        # # Debug: Show air time rewards
+        # if torch.any(self._last_air_time > 0.0):
+        #     print(f"Last air times: {self._last_air_time}")
+        #     print(f"Air time rewards: {air_time_reward}")
+        
+        # Only apply reward when robot is moving (prevents hopping in place)
+        air_time = air_time_reward * (torch.norm(self._commands[:, :2], dim=1) > 0.1)
 
         # Get contact forces from simulation state
         # contact_f has shape (num_envs * num_links, 6) where 6 = [torque_x, torque_y, torque_z, force_x, force_y, force_z]
