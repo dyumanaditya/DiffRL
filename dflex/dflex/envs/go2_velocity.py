@@ -82,11 +82,7 @@ class Go2VelocityEnv(DFlexEnv):
 
         self.early_termination = early_termination
         self.wandb_enabled = wandb and WANDB_AVAILABLE
-        
-        # Initialize wandb if enabled
-        if self.wandb_enabled:
-            self._init_wandb()
-            
+
         self.init_sim()
 
         # MDP parameters
@@ -98,11 +94,11 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        self.lin_vel_reward_scale = 6.0
+        self.lin_vel_reward_scale = 8.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 3.0
+        self.yaw_rate_reward_scale = 4.0
         # self.yaw_rate_reward_scale = 0.5
-        self.z_vel_reward_scale = -2.0
+        self.z_vel_reward_scale = -4.0
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -2.5e-5
         self.joint_accel_reward_scale = -2.5e-7
@@ -147,7 +143,10 @@ class Go2VelocityEnv(DFlexEnv):
         self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
 
         self.setup_visualizer(logdir)
-        self.print_model_info()
+        # self.print_model_info()
+        # Initialize wandb if enabled
+        if self.wandb_enabled:
+            self._init_wandb()
 
     def _init_wandb(self):
         """Initialize wandb for logging"""
@@ -158,8 +157,18 @@ class Go2VelocityEnv(DFlexEnv):
                 config={
                     "num_envs": self.num_envs,
                     "episode_length": self.episode_length,
-                    "dt": self.dt,
-                    "sim_substeps": self.sim_substeps,
+                    "lin_vel_reward_scale": self.lin_vel_reward_scale,
+                    "yaw_rate_reward_scale": self.yaw_rate_reward_scale,
+                    "z_vel_reward_scale": self.z_vel_reward_scale,
+                    "ang_vel_reward_scale": self.ang_vel_reward_scale,
+                    "joint_torque_reward_scale": self.joint_torque_reward_scale,
+                    "joint_accel_reward_scale": self.joint_accel_reward_scale,
+                    "action_rate_reward_scale": self.action_rate_reward_scale,
+                    "feet_air_time_reward_scale": self.feet_air_time_reward_scale,
+                    "undesired_contact_reward_scale": self.undesired_contact_reward_scale,
+                    "flat_orientation_reward_scale": self.flat_orientation_reward_scale,
+                    "termination_height": self.termination_height,
+                    "action_scale": self.action_scale,
                 }
             )
             print("Wandb initialized successfully for Go2 velocity environment")
@@ -366,9 +375,9 @@ class Go2VelocityEnv(DFlexEnv):
 
         target_joint_positions = clamped
 
-        print("TARGETS")
-        print(target_joint_positions)
-        print()
+        # print("TARGETS")
+        # print(target_joint_positions)
+        # print()
 
         # Set joint targets on the model (shape num_envs * 7+12)
         self.model.joint_target.view(self.num_envs, -1)[:, 7:] = target_joint_positions
@@ -498,9 +507,9 @@ class Go2VelocityEnv(DFlexEnv):
         joint_pos = state.joint_q.view(self.num_envs, -1)[:, 7:].clone()
         joint_vel = state.joint_qd.view(self.num_envs, -1)[:, 6:].clone()
 
-        print("JOINT POS OBS")
-        print(joint_pos)
-        print()
+        # print("JOINT POS OBS")
+        # print(joint_pos)
+        # print()
 
         # Torso height
         torso_height = torso_pos[:, 1].clone()
@@ -526,18 +535,18 @@ class Go2VelocityEnv(DFlexEnv):
         g_world = -self.y_unit_tensor
         projected_gravity_b = tu.quat_rotate_inverse(torso_quat, g_world)
 
-        print("OBSERVATIONS")
-        print("lin vel", lin_vel_b)
-        print("ang vel", ang_vel_b)
-        print("projected g", projected_gravity_b)
-        print("commands", self._commands)
-        print("joint pos", joint_pos)
-        print("joint vel", joint_vel)
-        print("joint torques", state.joint_tau.view(self.num_envs, -1)[:, 6:])
-        print("joint accel", state.joint_qdd.view(self.num_envs, -1)[:, 6:])
-        print("actions", self._actions)
-        print("torso height", torso_height)
-        print()
+        # print("OBSERVATIONS")
+        # print("lin vel", lin_vel_b)
+        # print("ang vel", ang_vel_b)
+        # print("projected g", projected_gravity_b)
+        # print("commands", self._commands)
+        # print("joint pos", joint_pos)
+        # print("joint vel", joint_vel)
+        # print("joint torques", state.joint_tau.view(self.num_envs, -1)[:, 6:])
+        # print("joint accel", state.joint_qdd.view(self.num_envs, -1)[:, 6:])
+        # print("actions", self._actions)
+        # print("torso height", torso_height)
+        # print()
 
         obs = torch.cat(
             [
@@ -697,19 +706,19 @@ class Go2VelocityEnv(DFlexEnv):
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.yaw_rate_reward_scale * self.sim_dt,
             "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
             "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
-            # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
-            # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
-            # "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
-            # "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
+            "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
+            "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
+            "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
+            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
 
-        print("REWARDS")
-        for key, value in rewards.items():
-            print(f"{key}: {value}")
-        print()
+        # print("REWARDS")
+        # for key, value in rewards.items():
+        #     print(f"{key}: {value}")
+        # print()
 
         # Store previous action here because it is called after get obs
         self._previous_actions = self._actions.clone()
