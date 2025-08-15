@@ -103,9 +103,9 @@ class Go2VelocityEnv(DFlexEnv):
         self.joint_torque_reward_scale = -2.5e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
-        self.feet_air_time_reward_scale = 0.5
-        self.undesired_contact_reward_scale = -4.0
-        self.flat_orientation_reward_scale = -5.0
+        self.feet_air_time_reward_scale = 0.25
+        self.undesired_contact_reward_scale = -2.0
+        self.flat_orientation_reward_scale = -2.5
 
         # Early termination parameters
         self.termination_height = termination_height
@@ -133,10 +133,6 @@ class Go2VelocityEnv(DFlexEnv):
         self._feet_last_contact_step = torch.zeros((self.num_envs, 4), dtype=torch.long, device=self.device)  # Last step each foot was in contact
         self._last_air_time = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device)  # Air time when feet last made contact
         self._current_step = 0
-        
-        # Debug: Print initial state
-        print(f"Initial feet_contact_history shape: {self._feet_contact_history.shape}")
-        print(f"Initial feet_contact_history: {self._feet_contact_history}")
 
         # Determined from print_model_info
         # These will be in contact with the ground
@@ -146,7 +142,7 @@ class Go2VelocityEnv(DFlexEnv):
         # link_cnt = self.model.link_count // self.num_envs
         # all_body_indices = list(range(link_cnt))  # 0 to num_links-1
         # self.undesired_contact_body_links = [idx for idx in all_body_indices if idx not in self.feet_contact_links]
-        self.undesired_contact_body_links = [5, 14, 23, 32]     # Thigh links
+        self.undesired_contact_body_links = [5, 14, 23, 32, 7, 16, 25, 34]     # Thigh, calf links
 
         self.setup_visualizer(logdir)
         # self.print_model_info()
