@@ -269,7 +269,7 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
-        start_height = 0.38
+        start_height = 0.40
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
         filename = "go2/urdf/go2.urdf"
@@ -287,8 +287,8 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=25.0,  # from config
-                damping=0.2,  # from config
+                stiffness=50.0,  # from config
+                damping=0.4,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
                 shape_ke=2.0e4,
