@@ -103,7 +103,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.joint_torque_reward_scale = -2.5e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
-        self.feet_air_time_reward_scale = 0.5
+        self.feet_air_time_reward_scale = 0.25
         self.undesired_contact_reward_scale = -5.0
         self.flat_orientation_reward_scale = -5.0
 
@@ -288,7 +288,7 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=85.0,  # from config
+                stiffness=25.0,  # from config
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
