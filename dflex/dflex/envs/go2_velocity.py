@@ -103,7 +103,7 @@ class Go2VelocityEnv(DFlexEnv):
         # Rewards: Following IsaacLab reward structure
         self.lin_vel_reward_scale = 10.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 5.0
+        self.yaw_rate_reward_scale = 3.0
         # self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -3.0
         self.ang_vel_reward_scale = -0.15
@@ -190,7 +190,7 @@ class Go2VelocityEnv(DFlexEnv):
         """Sample new velocity commands for specified environments"""
         # Sample linear velocity commands (x, z) and angular velocity (y)
         # Following IsaacLab pattern: uniform distribution between -1 and 1
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-2.0, 2.0)
+        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
         # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
         #     [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
         # )
