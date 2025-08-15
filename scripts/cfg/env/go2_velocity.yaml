@@ -4,7 +4,7 @@ config:
   render: ${general.render}
   device: ${general.device}
   num_envs: 128
-  stochastic_init: True
+  stochastic_init: False
   no_grad: ??? # decided based on algorithm
   episode_length: 1000
   MM_caching_frequency: 16
