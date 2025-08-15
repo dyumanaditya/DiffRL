@@ -86,7 +86,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 1.0
+        self.action_scale = 2.0
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -98,14 +98,14 @@ class Go2VelocityEnv(DFlexEnv):
         # self.lin_vel_reward_scale = 1.0
         self.yaw_rate_reward_scale = 1.0
         # self.yaw_rate_reward_scale = 0.5
-        self.z_vel_reward_scale = -4.0
+        self.z_vel_reward_scale = -5.0
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -2.5e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
         self.feet_air_time_reward_scale = 0.25
         self.undesired_contact_reward_scale = -2.0
-        self.flat_orientation_reward_scale = -2.5
+        self.flat_orientation_reward_scale = -5.0
 
         # Early termination parameters
         self.termination_height = termination_height
@@ -262,7 +262,7 @@ class Go2VelocityEnv(DFlexEnv):
             (-1.5708, 3.4907),
             (-2.7227, -0.83776)
         ]
-        self.soft_limit_ratio = float(0.95)
+        self.soft_limit_ratio = float(1.0)
 
         if self.visualize:
             self.env_dist = 2.5
@@ -287,13 +287,13 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=50.0,  # from config
-                damping=0.5,  # from config
+                stiffness=25.0,  # from config
+                damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
-                shape_ke=2.0e4,
-                shape_kd=8.0e3,
-                shape_kf=1.0e3,
+                shape_ke=2.0e3,
+                shape_kd=5.0e2,
+                shape_kf=1.0e2,
                 shape_mu=1.0,
                 limit_ke=1.0e3,
                 limit_kd=1.0e1,
@@ -351,31 +351,31 @@ class Go2VelocityEnv(DFlexEnv):
         # Convert action to target joint positions
         target_joint_positions = action + self.default_joint_pos
 
-        # TODO: clamp target_joint_positions to joint limits
-        # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
-        # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
-        jcount = target_joint_positions.shape[1]  # expected 12
-        lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
-        upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
-
-        # Compute inner (soft) bounds centered in the range
-        soft = self.soft_limit_ratio
-        # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
-        half_range = 0.5 * (upper - lower)
-        margin = (1.0 - soft) * half_range
-        inner_lower = lower + margin
-        inner_upper = upper - margin
-
-        # If any joint has no finite limits, leave it unchanged
-        finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
-        # Clamp into the soft range (torch.clamp supports tensor min/max)
-        clamped = torch.where(
-            finite,
-            torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
-            target_joint_positions,
-        )
-
-        target_joint_positions = clamped
+        # # TODO: clamp target_joint_positions to joint limits
+        # # --- Soft-limit clamp (ratio in (0, 1]; 1.0 = full limits, 0.95 = keep 5% margin) ---
+        # # Pull per-env limits for the actuated joints (skip the 7 DoFs of the floating base)
+        # jcount = target_joint_positions.shape[1]  # expected 12
+        # lower = self.model.joint_limit_lower.view(self.num_envs, -1)[:, 7:7 + jcount]
+        # upper = self.model.joint_limit_upper.view(self.num_envs, -1)[:, 7:7 + jcount]
+        #
+        # # Compute inner (soft) bounds centered in the range
+        # soft = self.soft_limit_ratio
+        # # inner = [lower + m, upper - m] with m = (1 - soft) * half_range
+        # half_range = 0.5 * (upper - lower)
+        # margin = (1.0 - soft) * half_range
+        # inner_lower = lower + margin
+        # inner_upper = upper - margin
+        #
+        # # If any joint has no finite limits, leave it unchanged
+        # finite = torch.isfinite(inner_lower) & torch.isfinite(inner_upper)
+        # # Clamp into the soft range (torch.clamp supports tensor min/max)
+        # clamped = torch.where(
+        #     finite,
+        #     torch.clamp(target_joint_positions, min=inner_lower, max=inner_upper),
+        #     target_joint_positions,
+        # )
+        #
+        # target_joint_positions = clamped
 
         # print("TARGETS")
         # print(target_joint_positions)
