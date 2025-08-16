@@ -146,7 +146,7 @@ class HopperEnv(DFlexEnv):
         self.start_pos = []
         self.start_joint_q = [0.0, 0.0, 0.0]
 
-        start_height = 0.0
+        start_height = 0.02
         offset_step = 2.5
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")

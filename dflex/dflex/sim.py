@@ -2325,7 +2325,7 @@ class SimulateFunc(torch.autograd.Function):
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
-        stiff_contact_threshold = 7e3  # Threshold for considering a contact as stiff
+        stiff_contact_threshold = 5e3  # Threshold for considering a contact as stiff
         stiff_env_mask = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
 
         # simulate
@@ -2367,7 +2367,9 @@ class SimulateFunc(torch.autograd.Function):
                 force_norms_per_env = force_norms.view(num_envs, links_per_env)
                 max_force_norms_per_env = torch.max(force_norms_per_env, dim=1)[0]
 
-                stiff_this_step = (max_force_norms_per_env > stiff_contact_threshold) & n_hits
+                # print("Max contact force norms per env:", max_force_norms_per_env)
+
+                stiff_this_step = (max_force_norms_per_env > stiff_contact_threshold)
                 stiff_env_mask |= stiff_this_step
 
                 # Check if there was contact in this substep
@@ -2733,33 +2735,32 @@ class SemiImplicitIntegrator:
                             # current values on the selected columns
                             cur = j_qd[:, idx]
 
-                            # sign of current values (+1, 0, -1)
-                            cur_sign = torch.sign(cur)
-
-                            # treat zeros (choose a direction; here we make zeros behave like positives)
-                            cur_sign = torch.where(cur_sign == 0,
-                                                   torch.ones_like(cur_sign),
-                                                   cur_sign)
-
-                            # magnitude of noise (always >= 0), same dtype/device/generator as j_qd
-                            noise_mag = torch.abs(torch.randn(
-                                num_envs_sub, idx.numel(),
-                                dtype=j_qd.dtype,
-                                device=j_qd.device,
-                                generator=self.noise_gen,
-                            )) * sigma
-
-                            # force noise to be opposite to current value
-                            noise = -cur_sign * noise_mag
-
+                            # # sign of current values (+1, 0, -1)
+                            # cur_sign = torch.sign(cur)
+                            #
+                            # # treat zeros (choose a direction; here we make zeros behave like positives)
+                            # cur_sign = torch.where(cur_sign == 0,
+                            #                        torch.ones_like(cur_sign),
+                            #                        cur_sign)
+                            #
                             # # magnitude of noise (always >= 0), same dtype/device/generator as j_qd
-                            # noise = torch.randn(
+                            # noise_mag = torch.abs(torch.randn(
                             #     num_envs_sub, idx.numel(),
                             #     dtype=j_qd.dtype,
                             #     device=j_qd.device,
                             #     generator=self.noise_gen,
-                            # ) * sigma
+                            # )) * sigma
+                            #
+                            # # force noise to be opposite to current value
+                            # noise = -cur_sign * noise_mag
 
+                            # just noise
+                            noise = torch.randn(
+                                num_envs_sub, idx.numel(),
+                                dtype=j_qd.dtype,
+                                device=j_qd.device,
+                                generator=self.noise_gen,
+                            ) * sigma
 
                             # apply only to selected columns, keep full shape
                             j_qd[:, idx] = cur + noise
