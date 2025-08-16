@@ -2312,7 +2312,7 @@ class SimulateFunc(torch.autograd.Function):
         # record launches
         ctx.tape = df.Tape()
 
-        ctx.bundling = bundling
+        # ctx.bundling = bundling
 
         # ctx.inputs is the input to the model but what are they?
         ctx.inputs = tensors
@@ -2388,10 +2388,10 @@ class SimulateFunc(torch.autograd.Function):
         # envs_in_contact = torch.nonzero(in_contact).squeeze(1)
         envs_in_contact = torch.nonzero(stiff_env_mask, as_tuple=False).squeeze(-1)
 
-        if envs_in_contact.numel() > 0:
-            ctx.going_to_bundle = True
-        else:
-            ctx.going_to_bundle = False
+        # if envs_in_contact.numel() > 0:
+        #     ctx.going_to_bundle = True
+        # else:
+        #     ctx.going_to_bundle = False
 
         # print("final state")
         # print(state_out.joint_q)
