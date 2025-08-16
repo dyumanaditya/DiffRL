@@ -9,7 +9,7 @@
       <joint axis="0 1 0" damping="2" armature="0.01" frictionloss="0.2"/>
       <motor ctrlrange="-23.7 23.7"/>
       <default class="affine">
-        <position kp="50" kv="2" ctrlrange="-6.28 6.28" forcerange="-80 80"/>
+        <position kp="25" kv="0.2" ctrlrange="-6.28 6.28" forcerange="-80 80"/>
       </default>
       <default class="abduction">
         <joint axis="1 0 0" range="-1.0472 1.0472"/>
