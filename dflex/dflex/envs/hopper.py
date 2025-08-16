@@ -195,6 +195,12 @@ class HopperEnv(DFlexEnv):
         self.model.gravity = torch.tensor(
             (0.0, -9.81, 0.0), dtype=torch.float32, device=self.device
         )
+
+        # Set contact parameters
+        self.model.contact_ke = self.contact_ke
+        self.model.contact_kd = self.contact_kd
+        self.model.contact_kf = self.contact_kf
+        self.model.contact_mu = self.contact_mu
         self._set_domain_randomization()
 
         self.integrator = df.sim.SemiImplicitIntegrator(bundle_info=self.bundle_info)
