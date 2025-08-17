@@ -2328,7 +2328,7 @@ class SimulateFunc(torch.autograd.Function):
         # Initialize contact metrics for accumulation across all substeps
         total_max_contact_force_norm = 0.0
         total_steps_in_contact = 0
-        # stiff_contact_threshold = 5e3  # Threshold for considering a contact as stiff
+        # stiff_contact_threshold = 8e3  # Threshold for considering a contact as stiff
         stiff_contact_threshold = 1.2e3  # Threshold for considering a contact as stiff
         stiff_env_mask = torch.zeros(num_envs, dtype=torch.bool, device=actuation.device)
 
