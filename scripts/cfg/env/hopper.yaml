@@ -37,7 +37,7 @@ config:
     bodies: [5]  # Randomize the foot and the ground (foot is body 5 in dflex)
     # Nominal ke=2e4
     # ke_range: [1e3, 1e5]
-    ke_range: [8e3, 5e4]
+    ke_range: [6e4, 6e5]
     # Nominal kd=2e3
     # kd_range: [1e2, 1e4]
     kd_range: [1e3, 3e3]

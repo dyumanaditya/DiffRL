@@ -291,6 +291,9 @@ class DFlexEnv:
             mu_range=mu_range,
             target_bodies=target_bodies,
         )
+        
+        # Initialize contact parameters for all environments
+        self.model.randomize_contact_params()
 
     def compute_termination(self, obs, act):
         # Never terminate; needs to be overriden if we need termination
@@ -469,6 +472,10 @@ class DFlexEnv:
             self.state.joint_act.view(self.num_envs, -1)[env_ids, :] = 0.0
 
             self.progress_buf[env_ids] = 0
+
+            # Randomize contact parameters for the reset environments if domain randomization is enabled
+            if self.dr_params is not None:
+                self.model.randomize_contact_params(env_ids)
 
             self.obs_buf = self.observation_from_state(self.state)
 

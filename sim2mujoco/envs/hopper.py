@@ -13,7 +13,7 @@ class HopperMujocoEnv:
         xml = os.path.join(os.path.dirname(__file__), 'assets', 'hopper.xml')
         self.env = gym.make(
             'Hopper-v5',
-            # xml_file=xml,
+            xml_file=xml,
             render_mode=render_mode,
             healthy_angle_range=[-np.inf, np.inf],
             # frame_skip=8

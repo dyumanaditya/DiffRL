@@ -883,7 +883,7 @@ class Model:
                 start = e * n_shapes_env
                 end = start + n_shapes_env
 
-                block = self.shape_body[start:end].clone()  # copy this env’s slice
+                block = self.shape_body[start:end].clone()  # copy this env's slice
                 shift = (e - k) * n_links_env  # how far it moves left
                 block -= shift  # re‑index links
 
@@ -994,7 +994,7 @@ class Model:
             block = self.joint_parent[start:end].clone()
 
             shift = (e - k) * n_links_env  # how much this env moves left
-            mask = block >= 0  # -1 means “root”, keep as is
+            mask = block >= 0  # -1 means "root", keep as is
             block[mask] -= shift
 
             parent_blocks.append(block)
@@ -1342,7 +1342,7 @@ class Model:
             "target_bodies": target_bodies
         }
 
-    def randomize_contact_params(self) -> None:
+    def randomize_contact_params(self, env_ids: torch.Tensor = None) -> None:
         if getattr(self, "contact_randomization", None) is None:
             return
 
@@ -1355,6 +1355,17 @@ class Model:
         dev = self.adapter  # CUDA / CPU device handle
         E = int(self.articulation_count)  # number of environments
 
+        # If env_ids is provided, only randomize those environments
+        if env_ids is not None:
+            env_ids = env_ids.to(torch.long)
+            assert env_ids.ndim == 1, "env_ids must be a 1-D LongTensor"
+            keep_envs = env_ids.tolist()
+            n_keep = len(keep_envs)
+        else:
+            # If no env_ids provided, randomize all environments (original behavior)
+            keep_envs = list(range(E))
+            n_keep = E
+
         shapes_per_env = self.shape_count // E
 
         links_per_env = (
@@ -1364,11 +1375,11 @@ class Model:
         if dr_target_shape is not None and len(dr_target_shape):
             dr_target_shape = torch.as_tensor(dr_target_shape, device=dev, dtype=torch.long)
         else:
-            dr_target_shape = None  # means “all shapes”
+            dr_target_shape = None  # means "all shapes"
 
         # -------- helper --------------------------------------------------
         def _rand_vec(low, high):
-            return torch.rand(E, device=dev) * (high - low) + low
+            return torch.rand(n_keep, device=dev) * (high - low) + low
 
         def _rand_scalar(low, high):  # one scalar
             return (torch.rand(1, device=dev) * (high - low) + low).item()
@@ -1388,22 +1399,23 @@ class Model:
             # view into storage: (E, Senv, 4)
             mat = self.shape_materials.view(E, shapes_per_env, 4)
 
-            # (E, 1, 4) → broadcast along shapes_per_env
+            # (n_keep, 1, 4) → broadcast along shapes_per_env
             param = torch.stack([ke, kd, kf, mu], dim=-1)[:, None, :]
 
             if dr_target_shape is None:
-                # update *all* shapes: broadcast does the work
-                mat.copy_(param.expand(-1, shapes_per_env, -1))
+                # update only the selected environments
+                for i, env_idx in enumerate(keep_envs):
+                    mat[env_idx] = param[i].expand(shapes_per_env, -1)
             else:
                 # build mask of shapes whose *local* body‑id is in target_bodies
-                local_body_ids = (self.shape_body
-                                  .view(E, shapes_per_env)  # (E,Senv)
-                                  - torch.arange(E, device=dev)[:, None] * links_per_env)
+                for i, env_idx in enumerate(keep_envs):
+                    local_body_ids = (self.shape_body[env_idx * shapes_per_env:(env_idx + 1) * shapes_per_env]
+                                      - env_idx * links_per_env)
 
-                mask = (local_body_ids[..., None] == dr_target_shape).any(-1)  # (E,Senv)
+                    mask = (local_body_ids[..., None] == dr_target_shape).any(-1)  # (Senv,)
 
-                # same shape as mat — boolean advanced indexing keeps mapping
-                mat[mask] = param.expand(-1, shapes_per_env, -1)[mask]
+                    # same shape as mat[env_idx] — boolean advanced indexing keeps mapping
+                    mat[env_idx][mask] = param[i].expand(mask.sum(), -1)
 
             # -------- update ground / global contact tensors -------------
             self.contact_ke = ground_ke
