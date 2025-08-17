@@ -190,10 +190,10 @@ class Go2VelocityEnv(DFlexEnv):
         """Sample new velocity commands for specified environments"""
         # Sample linear velocity commands (x, z) and angular velocity (y)
         # Following IsaacLab pattern: uniform distribution between -1 and 1
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
-        # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
-        #     [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
-        # )
+        # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
+            [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
+        )
 
         # Optionally scale commands to more realistic ranges
         # self._commands[env_ids, :2] *= 2.0  # Scale linear velocities
@@ -295,8 +295,8 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=85.0,  # from config
-                damping=2.0,  # from config
+                stiffness=25.0,  # from config
+                damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
                 shape_ke=self.contact_ke,
