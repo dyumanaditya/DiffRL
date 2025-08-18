@@ -10,11 +10,20 @@
 <!--        <geom condim="1" solimp="0.8 0.8 0.01 0.5 2" margin="0.001" material="geom" rgba="0.8 0.6 0.4 1" />-->
 <!--        <general ctrllimited="true" ctrlrange="-0.4 0.4" />-->
 <!--    </default>-->
+<!--    <default class="main">-->
+<!--        <joint limited="true" armature="1" damping="1" />-->
+<!--        <geom condim="1" solimp="0.9 0.95 0.001 0.5 6" solref="-1000 -100" margin="0.001" material="geom" rgba="0.8 0.6 0.4 1" />-->
+<!--        <general ctrllimited="true" ctrlrange="-0.4 0.4" />-->
+<!--    </default>-->
     <default class="main">
-        <joint limited="true" armature="1" damping="1" />
-        <geom condim="1" solimp="0.9 0.95 0.001 0.5 6" solref="-1000 -100" margin="0.001" material="geom" rgba="0.8 0.6 0.4 1" />
-        <general ctrllimited="true" ctrlrange="-0.4 0.4" />
+      <joint limited="true" armature="1" damping="1" />
+      <!-- +50% stiffness; damping scaled to keep roughly the same damping ratio -->
+      <geom condim="1" solimp="0.98 0.999 0.0005 0.5 6"
+            solref="-1500 -122"
+            margin="0.001" material="geom" rgba="0.8 0.6 0.4 1" />
+      <general ctrllimited="true" ctrlrange="-0.4 0.4" />
     </default>
+
     <asset>
         <texture type="skybox" builtin="gradient" rgb1="0.4 0.5 0.6" rgb2="0 0 0" width="100" height="600" />
         <texture type="cube" name="texgeom" builtin="flat" mark="cross" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" markrgb="1 1 1" width="127" height="762" />
