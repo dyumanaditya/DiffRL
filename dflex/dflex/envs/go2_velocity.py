@@ -101,9 +101,9 @@ class Go2VelocityEnv(DFlexEnv):
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
         
         # Rewards: Following IsaacLab reward structure
-        # self.lin_vel_reward_scale = 10.0
-        self.lin_vel_reward_scale = 1.0
-        # self.yaw_rate_reward_scale = 5.0
+        self.lin_vel_reward_scale = 10.0
+        # self.lin_vel_reward_scale = 1.0
+        self.yaw_rate_reward_scale = 2.0
         self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -2.0
         self.ang_vel_reward_scale = -0.05
@@ -303,10 +303,10 @@ class Go2VelocityEnv(DFlexEnv):
                 shape_kd=self.contact_kd,
                 shape_kf=self.contact_kf,
                 shape_mu=self.contact_mu,
-                # limit_ke=1.0e3,
-                # limit_kd=1.0e1,
-                limit_ke=0.0,
-                limit_kd=0.0,
+                limit_ke=1.0e3,
+                limit_kd=1.0e1,
+                # limit_ke=0.0,
+                # limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
