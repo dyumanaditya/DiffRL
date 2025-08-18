@@ -48,6 +48,10 @@ config:
     # mu_range: [0.5, 1.0]
     mu_range: [0.7, 1.0]
 
+  # Observation noise
+  observation_noise: False  # Enable/disable observation noise
+  observation_noise_std: 0.01  # Standard deviation of observation noise (default: 0.01)
+
 mujoco:
   config:
     # Sim-to-sim transfer to mujoco

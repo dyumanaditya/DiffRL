@@ -1347,10 +1347,14 @@ class Model:
             return
 
         ke_low, ke_high = self.contact_randomization["ke_range"]
-        kd_low, kd_high = self.contact_randomization["kd_range"]
+        kd_range = self.contact_randomization.get("kd_range", None)
         kf_low, kf_high = self.contact_randomization["kf_range"]
         mu_low, mu_high = self.contact_randomization["mu_range"]
         dr_target_shape = self.contact_randomization["target_bodies"]
+        
+        # Check if ratio is provided for ke/kd relationship
+        ratio = self.contact_randomization.get("ratio", None)
+        use_ratio = ratio is not None
 
         dev = self.adapter  # CUDA / CPU device handle
         E = int(self.articulation_count)  # number of environments
@@ -1385,12 +1389,35 @@ class Model:
             return (torch.rand(1, device=dev) * (high - low) + low).item()
 
         ke = _rand_vec(ke_low, ke_high)
-        kd = _rand_vec(kd_low, kd_high)
+        
+        # Compute kd based on ratio if provided, otherwise use kd_range
+        if use_ratio:
+            # kd = ke / ratio
+            kd = ke / ratio
+        else:
+            # Fall back to normal behavior using kd_range
+            if kd_range is not None:
+                kd_low, kd_high = kd_range
+                kd = _rand_vec(kd_low, kd_high)
+            else:
+                # Default fallback if no kd_range provided
+                kd = ke / 10.0  # Default ratio of 10
+        
         kf = _rand_vec(kf_low, kf_high)
         mu = _rand_vec(mu_low, mu_high)
 
         ground_ke = _rand_scalar(ke_low, ke_high)
-        ground_kd = _rand_scalar(kd_low, kd_high)
+        
+        # Compute ground kd based on ratio if provided, otherwise use kd_range
+        if use_ratio:
+            ground_kd = ground_ke / ratio
+        else:
+            if kd_range is not None:
+                kd_low, kd_high = kd_range
+                ground_kd = _rand_scalar(kd_low, kd_high)
+            else:
+                ground_kd = ground_ke / 10.0  # Default ratio of 10
+        
         ground_kf = _rand_scalar(kf_low, kf_high)
         ground_mu = _rand_scalar(mu_low, mu_high)
 

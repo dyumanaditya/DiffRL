@@ -94,6 +94,15 @@ class HopperEnv(DFlexEnv):
         self.contact_kf = kwargs["contact"]["kf"]
         self.contact_mu = kwargs["contact"]["mu"]
 
+        # Observation noise parameters
+        self.observation_noise = kwargs.get("observation_noise", False)
+        self.observation_noise_std = kwargs.get("observation_noise_std", 0.01)  # Default: 0.01 (most common noise level)
+        
+        # Create observation noise tensor if enabled
+        if self.observation_noise:
+            self.obs_noise_tensor = torch.zeros((self.num_envs, self.num_observations), device=self.device)
+            self._update_observation_noise()
+
         self.init_sim()
 
         # other parameters
@@ -111,6 +120,24 @@ class HopperEnv(DFlexEnv):
 
         # TODO logdir shouldn't need to be passed in here
         self.setup_visualizer(logdir)
+
+    def _update_observation_noise(self):
+        """Update the observation noise tensor with new random values."""
+        if self.observation_noise:
+            self.obs_noise_tensor = torch.randn(
+                (self.num_envs, self.num_observations), 
+                device=self.device
+            ) * self.observation_noise_std
+
+    def _update_observation_noise_for_envs(self, env_ids):
+        """Update observation noise for specific environments."""
+        if self.observation_noise and env_ids is not None:
+            num_envs_to_update = len(env_ids)
+            noise_update = torch.randn(
+                (num_envs_to_update, self.num_observations), 
+                device=self.device
+            ) * self.observation_noise_std
+            self.obs_noise_tensor[env_ids] = noise_update
 
     def init_sim(self):
         self.builder = df.sim.ModelBuilder()
@@ -272,13 +299,23 @@ class HopperEnv(DFlexEnv):
         self.state.joint_act.view(self.num_envs, -1)[:, 3:] = act
 
     def observation_from_state(self, state):
-        return torch.cat(
-            [
-                state.joint_q.view(self.num_envs, -1)[:, 1:],
-                state.joint_qd.view(self.num_envs, -1),
-            ],
-            dim=-1,
-        )
+        if self.observation_noise:
+            self.obs_noise_tensor = torch.randn((self.num_envs, self.num_observations), device=self.device) * self.observation_noise_std
+            return torch.cat(
+                [
+                    state.joint_q.view(self.num_envs, -1)[:, 1:] + self.obs_noise_tensor[:, 0:5],
+                    state.joint_qd.view(self.num_envs, -1) + self.obs_noise_tensor[:, 5:],
+                ],
+                dim=-1,
+            )
+        else:
+            return torch.cat(
+                [
+                    state.joint_q.view(self.num_envs, -1)[:, 1:],
+                    state.joint_qd.view(self.num_envs, -1),
+                ],
+                dim=-1,
+            )
 
     def calculate_reward(self, obs, act):
         height_diff = obs[:, 0] - (
@@ -299,3 +336,17 @@ class HopperEnv(DFlexEnv):
         act_penalty = torch.sum(act**2, dim=-1) * self.action_penalty
 
         return progress_reward + height_reward + angle_reward + act_penalty
+
+    def reset(self, env_ids=None, grads=False, force_reset=False):
+        """Override reset method to update observation noise for reset environments."""
+        # Call parent reset method
+        obs = super().reset(env_ids, grads, force_reset)
+        
+        # Update observation noise for reset environments if enabled
+        if self.observation_noise and env_ids is not None:
+            self._update_observation_noise_for_envs(env_ids)
+        elif self.observation_noise and (env_ids is None or force_reset):
+            # Update noise for all environments if resetting all
+            self._update_observation_noise()
+        
+        return obs
