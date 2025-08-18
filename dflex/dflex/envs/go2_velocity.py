@@ -295,7 +295,7 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=30.0,  # from config
+                stiffness=25.0,  # from config
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
@@ -325,10 +325,10 @@ class Go2VelocityEnv(DFlexEnv):
         )
 
         # Set ground contact
-        # self.model.contact_ke = self.contact_ke
-        # self.model.contact_kd = self.contact_kd
-        # self.model.contact_kf = self.contact_kf
-        # self.model.contact_mu = self.contact_mu
+        self.model.contact_ke = self.contact_ke
+        self.model.contact_kd = self.contact_kd
+        self.model.contact_kf = self.contact_kf
+        self.model.contact_mu = self.contact_mu
 
         self.integrator = df.sim.SemiImplicitIntegrator()
 
