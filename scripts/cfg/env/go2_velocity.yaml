@@ -18,8 +18,8 @@ config:
   wandb: False
 
   contact:
-    ke: 1e3  # Nominal stiffness for elastic contact
-    kd: 5e2  # Nominal damping for elastic contact
+    ke: 3e3  # Nominal stiffness for elastic contact
+    kd: 7e2  # Nominal damping for elastic contact
     kf: 1e2  # Nominal friction for elastic contact
     mu: 0.75  # Nominal friction coefficient for elastic contact
 

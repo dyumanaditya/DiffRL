@@ -109,7 +109,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -1e-5
         self.joint_accel_reward_scale = -2.5e-7
-        self.action_rate_reward_scale = -0.01
+        self.action_rate_reward_scale = -0.005
         self.feet_air_time_reward_scale = 0.25
         self.undesired_contact_reward_scale = -1.0
         self.flat_orientation_reward_scale = -2.5
