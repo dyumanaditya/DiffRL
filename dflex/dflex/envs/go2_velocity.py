@@ -64,7 +64,7 @@ class Go2VelocityEnv(DFlexEnv):
     ):
         num_obs = 49
         num_act = 12
-        self.playback_speed = 0.005
+        self.playback_speed = 0.05
 
         super(Go2VelocityEnv, self).__init__(
             num_envs,
@@ -737,8 +737,8 @@ class Go2VelocityEnv(DFlexEnv):
         
         # Calculate air time reward: (last_air_time - 0.5) * first_contact
         # This rewards feet that stay in air for ~0.5 seconds when they make contact
-        air_time_reward = torch.sum((self._last_air_time - 0.4) * (self._last_air_time > 0.0), dim=1)
-        
+        air_time_reward = torch.sum((self._last_air_time - 0.3) * (self._last_air_time > 0.0), dim=1)
+        air_time_reward = torch.clamp(air_time_reward, min=0)
         # # Debug: Show air time rewards
         # if torch.any(self._last_air_time > 0.0):
         #     print(f"Last air times: {self._last_air_time}")
