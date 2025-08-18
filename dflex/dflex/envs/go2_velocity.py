@@ -93,7 +93,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 0.5
+        self.action_scale = 1.0
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -767,12 +767,12 @@ class Go2VelocityEnv(DFlexEnv):
         rewards = {
             "track_lin_vel_xy_exp": lin_vel_error_mapped * self.lin_vel_reward_scale * self.sim_dt,
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.yaw_rate_reward_scale * self.sim_dt,
-            "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
-            "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
-            "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
-            "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
-            "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            # "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
+            # "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
+            # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
+            # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
+            # "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
+            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
