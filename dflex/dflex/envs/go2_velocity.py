@@ -64,7 +64,7 @@ class Go2VelocityEnv(DFlexEnv):
     ):
         num_obs = 49
         num_act = 12
-        self.playback_speed = 0.05
+        self.playback_speed = 1/60
 
         super(Go2VelocityEnv, self).__init__(
             num_envs,
