@@ -303,10 +303,10 @@ class Go2VelocityEnv(DFlexEnv):
                 shape_kd=self.contact_kd,
                 shape_kf=self.contact_kf,
                 shape_mu=self.contact_mu,
-                limit_ke=1.0e3,
-                limit_kd=1.0e1,
-                # limit_ke=0.0,
-                # limit_kd=0.0,
+                # limit_ke=1.0e3,
+                # limit_kd=1.0e1,
+                limit_ke=0.0,
+                limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
