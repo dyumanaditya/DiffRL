@@ -303,10 +303,10 @@ class Go2VelocityEnv(DFlexEnv):
                 shape_kd=self.contact_kd,
                 shape_kf=self.contact_kf,
                 shape_mu=self.contact_mu,
-                limit_ke=1.0e3,
-                limit_kd=1.0e1,
-                # limit_ke=0.0,
-                # limit_kd=0.0,
+                # limit_ke=1.0e3,
+                # limit_kd=1.0e1,
+                limit_ke=0.0,
+                limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
@@ -772,7 +772,7 @@ class Go2VelocityEnv(DFlexEnv):
             "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
             "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
             "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
