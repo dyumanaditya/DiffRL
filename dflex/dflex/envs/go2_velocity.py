@@ -295,7 +295,7 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=25.0,  # from config
+                stiffness=50.0,  # from config
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
