@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib
 from glob import glob
 from pathlib import Path
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # ---- parse args BEFORE importing pyplot so we can set backend ----
 def build_argparser():
@@ -12,6 +13,7 @@ def build_argparser():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--in", dest="inp", type=str, help="Path to a single loss_landscape_grid.npz")
     g.add_argument("--glob", dest="pattern", type=str, help='Glob pattern, e.g. "outputs/**/loss_landscape_grid.npz"')
+    g.add_argument("--compare", dest="compare", nargs=2, type=str, help="Compare two runs: --compare run1.npz run2.npz")
 
     ap.add_argument("--outdir", type=str, default=None, help="Directory to write plots. Default: alongside each npz")
     ap.add_argument("--vmin", type=float, default=None, help="Fix min color scale (use with --vmax for comparisons)")
@@ -233,6 +235,131 @@ def plot_slices(X, Y, Z, out_path, show=False, block=True):
 
     finalize_figure(fig, out_path, show=show, block=block, save=True, save_after_show=True)
 
+def plot_comparison_contour(X1, Y1, Z1, X2, Y2, Z2, out_path, vmin=None, vmax=None, levels=30, show=False, block=True, label1="Run 1", label2="Run 2"):
+    from matplotlib import colors, cm
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Determine global min/max for consistent scaling
+    vmin_eff = float(min(np.nanmin(Z1), np.nanmin(Z2))) if vmin is None else vmin
+    vmax_eff = float(max(np.nanmax(Z1), np.nanmax(Z2))) if vmax is None else vmax
+
+    cmap = cm.get_cmap("RdYlBu_r")
+    if getattr(args, "loss_scale", "linear") == "symlog10":
+        norm = colors.SymLogNorm(linthresh=1.0, linscale=1.0, vmin=vmin_eff, vmax=vmax_eff, base=10)
+    else:
+        norm = colors.Normalize(vmin=vmin_eff, vmax=vmax_eff, clip=True)
+
+    # First plot
+    cs1 = ax1.contourf(X1, Y1, Z1, levels=levels, cmap=cmap, norm=norm)
+    ax1.set_xlabel(r"$\alpha$")
+    ax1.set_ylabel(r"$\beta$")
+    ax1.tick_params(axis="both", labelsize=20)
+    ax1.set_title(label1, fontsize=24)
+
+    # Second plot
+    cs2 = ax2.contourf(X2, Y2, Z2, levels=levels, cmap=cmap, norm=norm)
+    ax2.set_xlabel(r"$\alpha$")
+    ax2.set_ylabel(r"$\beta$")
+    ax2.tick_params(axis="both", labelsize=20)
+    ax2.set_title(label2, fontsize=24)
+
+    # Create colorbar with explicit positioning to avoid overlap
+    divider = make_axes_locatable(ax2)
+    cax = divider.append_axes("right", size="5%", pad=0.3)
+    
+    # Create a mappable object that covers both datasets for correct colorbar range
+    mappable = cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array(np.concatenate([Z1.flatten(), Z2.flatten()]))
+    cbar = fig.colorbar(mappable, cax=cax)
+    cbar.ax.set_ylabel("Loss", fontsize=24, labelpad=18)
+    cbar.ax.tick_params(labelsize=20)
+
+    # Use tight_layout to prevent overlap
+    plt.tight_layout()
+
+    finalize_figure(fig, out_path, show=show, block=block, save=True, save_after_show=True)
+
+def plot_comparison_surface(X1, Y1, Z1, X2, Y2, Z2, out_path, show=False, block=True, label1="Run 1", label2="Run 2"):
+    from matplotlib import cm, colors
+
+    fig = plt.figure(figsize=(20, 7))
+    
+    # Determine global min/max for consistent scaling
+    vmin = float(min(np.nanmin(Z1), np.nanmin(Z2))) if getattr(args, "vmin", None) is None else args.vmin
+    vmax = float(max(np.nanmax(Z1), np.nanmax(Z2))) if getattr(args, "vmax", None) is None else args.vmax
+
+    if getattr(args, "loss_scale", "linear") == "symlog10":
+        norm = colors.SymLogNorm(linthresh=1.0, linscale=1.0, vmin=vmin, vmax=vmax, base=10)
+    else:
+        norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=True)
+
+    cmap = cm.get_cmap("RdYlBu_r")
+
+    # First 3D plot
+    ax1 = fig.add_subplot(121, projection='3d')
+    facecolors1 = cmap(norm(Z1))
+    ax1.plot_surface(X1, Y1, Z1, facecolors=facecolors1, rstride=1, cstride=1,
+                     linewidth=0, antialiased=True, shade=False)
+    ax1.set_xlabel(r"$\alpha$", labelpad=22)
+    ax1.set_ylabel(r"$\beta$", labelpad=22)
+    ax1.zaxis.set_rotate_label(False)
+    ax1.set_zlabel("Loss", rotation=90, labelpad=40)
+    ax1.tick_params(axis="x", pad=12, labelsize=18)
+    ax1.tick_params(axis="y", pad=12, labelsize=18)
+    ax1.tick_params(axis="z", pad=14, labelsize=18)
+    ax1.set_zlim(vmin, vmax)
+    ax1.set_title(label1, fontsize=24)
+
+    # Second 3D plot
+    ax2 = fig.add_subplot(122, projection='3d')
+    facecolors2 = cmap(norm(Z2))
+    ax2.plot_surface(X2, Y2, Z2, facecolors=facecolors2, rstride=1, cstride=1,
+                     linewidth=0, antialiased=True, shade=False)
+    ax2.set_xlabel(r"$\alpha$", labelpad=22)
+    ax2.set_ylabel(r"$\beta$", labelpad=22)
+    ax2.zaxis.set_rotate_label(False)
+    ax2.set_zlabel("Loss", rotation=90, labelpad=40)
+    ax2.tick_params(axis="x", pad=12, labelsize=18)
+    ax2.tick_params(axis="y", pad=12, labelsize=18)
+    ax2.tick_params(axis="z", pad=14, labelsize=18)
+    ax2.set_zlim(vmin, vmax)
+    ax2.set_title(label2, fontsize=24)
+
+    # Create colorbar with manual positioning for 3D plots
+    # Position colorbar to the right of both plots
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+    mappable = cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array(np.concatenate([Z1.flatten(), Z2.flatten()]))
+    cbar = fig.colorbar(mappable, cax=cbar_ax)
+    cbar.ax.set_ylabel("Loss", fontsize=24, labelpad=16)
+    cbar.ax.tick_params(labelsize=18)
+
+    finalize_figure(fig, out_path, show=show, block=block, save=True, save_after_show=True)
+
+def make_comparison_plots(npz_path1, npz_path2, outdir=None, vmin=None, vmax=None, levels=30, prefix=None, show=False, block=True):
+    X1, Y1, Z1, base_ret1, base_loss1, meta1 = load_grid(npz_path1)
+    X2, Y2, Z2, base_ret2, base_loss2, meta2 = load_grid(npz_path2)
+
+    if outdir is None:
+        outdir = Path(npz_path1).parent
+    else:
+        outdir = Path(outdir)
+    ensure_dir(outdir)
+
+    # Generate labels from filenames
+    label1 = Path(npz_path1).parent.name
+    label2 = Path(npz_path2).parent.name
+    
+    tag = prefix or "comparison"
+
+    # Plot comparisons
+    plot_comparison_contour(X1, Y1, Z1, X2, Y2, Z2, 
+                           outdir / f"{tag}_contour.png", vmin, vmax, levels, show=show, block=block,
+                           label1=label1, label2=label2)
+    plot_comparison_surface(X1, Y1, Z1, X2, Y2, Z2, 
+                           outdir / f"{tag}_surface.png", show=show, block=block,
+                           label1=label1, label2=label2)
+
 def make_all_plots(npz_path, outdir=None, vmin=None, vmax=None, levels=30, prefix=None, show=False, block=True):
     X, Y, Z, base_ret, base_loss, meta = load_grid(npz_path)
 
@@ -252,6 +379,32 @@ def make_all_plots(npz_path, outdir=None, vmin=None, vmax=None, levels=30, prefi
     plot_slices(X, Y, Z, outdir / f"{tag}_slices.png", show=show, block=block)
 
 def main():
+    if args.compare:
+        # Handle comparison case
+        npz_path1, npz_path2 = args.compare
+        if not os.path.exists(npz_path1):
+            raise SystemExit(f"First file not found: {npz_path1}")
+        if not os.path.exists(npz_path2):
+            raise SystemExit(f"Second file not found: {npz_path2}")
+        
+        print(f"Comparing two runs:")
+        print(f"- {npz_path1}")
+        print(f"- {npz_path2}")
+        
+        make_comparison_plots(
+            npz_path1=npz_path1,
+            npz_path2=npz_path2,
+            outdir=args.outdir,
+            vmin=args.vmin,
+            vmax=args.vmax,
+            levels=args.levels,
+            prefix=args.prefix,
+            show=args.show,
+            block=args.block,
+        )
+        return
+
+    # Handle single file or glob cases
     files = []
     if args.inp:
         files = [args.inp]
