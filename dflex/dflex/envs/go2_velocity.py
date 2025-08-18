@@ -93,7 +93,7 @@ class Go2VelocityEnv(DFlexEnv):
         self.init_sim()
 
         # MDP parameters
-        self.action_scale = 1.0
+        self.action_scale = 0.5
 
         # Velocity tracking parameters
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
@@ -295,7 +295,7 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=50.0,  # from config
+                stiffness=25.0,  # from config
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
@@ -303,10 +303,10 @@ class Go2VelocityEnv(DFlexEnv):
                 shape_kd=self.contact_kd,
                 shape_kf=self.contact_kf,
                 shape_mu=self.contact_mu,
-                # limit_ke=1.0e3,
-                # limit_kd=1.0e1,
-                limit_ke=0.0,
-                limit_kd=0.0,
+                limit_ke=1.0e3,
+                limit_kd=1.0e1,
+                # limit_ke=0.0,
+                # limit_kd=0.0,
                 armature=0.006,
             )
             self.start_pos.append(start_pos)
