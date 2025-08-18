@@ -295,7 +295,7 @@ class Go2VelocityEnv(DFlexEnv):
                 ),
                 robot=robot,
                 floating=True,
-                stiffness=25.0,  # from config
+                stiffness=30.0,  # from config
                 damping=0.2,  # from config
                 # stiffness=1000.0,  # from config
                 # damping=10.0,  # from config
@@ -767,7 +767,7 @@ class Go2VelocityEnv(DFlexEnv):
         rewards = {
             "track_lin_vel_xy_exp": lin_vel_error_mapped * self.lin_vel_reward_scale * self.sim_dt,
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.yaw_rate_reward_scale * self.sim_dt,
-            # "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
+            "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
             # "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
             # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
             # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
