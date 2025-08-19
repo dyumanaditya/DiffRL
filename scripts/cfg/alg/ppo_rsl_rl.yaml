@@ -1,0 +1,31 @@
+name: ppo
+use_rsl_rl: True
+
+params:
+  algorithm:
+    class_name: PPO
+    num_learning_epochs: 5
+    num_mini_batches: 1
+    clip_param: 0.2
+    gamma: 0.99
+    lam: 0.95
+    value_loss_coef: 1.0
+    entropy_coef: 0.0
+    learning_rate: ${oc.select:env.ppo.lr, 3e-4}
+    max_grad_norm: 1.0
+    use_clipped_value_loss: True
+    schedule: adaptive
+    desired_kl: ${oc.select:env.ppo.kl_threshold, 0.008}
+
+  policy:
+    class_name: ActorCritic
+    actor_hidden_dims: ${oc.select:env.ppo.actor_mlp.units, [64, 64]}
+    critic_hidden_dims: ${oc.select:env.ppo.actor_mlp.units, [64, 64]}
+    activation: elu
+    init_noise_std: 1.0
+
+  num_steps_per_env: ${oc.select:env.ppo.horizon_length, 32}
+  save_interval: ${oc.select:env.ppo.save_frequency, 400}
+  empirical_normalization: True
+  logger: tensorboard
+  max_iterations: ${oc.select:env.ppo.max_epochs, 5000} 
