@@ -13,6 +13,133 @@ from gym import wrappers
 from rl_games.torch_runner import Runner
 from rl_games.common import env_configurations, vecenv
 from omegaconf import OmegaConf, open_dict
+import torch
+
+try:
+    from shac.utils.rsl_utils import RSLRLEnvWrapper, OnPolicyRunner
+    RSL_RL_AVAILABLE = True
+except ImportError:
+    RSL_RL_AVAILABLE = False
+    print_warning("RSL-RL wrapper not available. Ensure rsl_rl is installed and configured correctly.")
+
+# # Import rsl_rl components
+# try:
+#     # Add the rsl_rl source directory to Python path
+#     import sys
+#     rsl_rl_path = os.path.join(os.path.dirname(__file__), '..', 'externals', 'rsl_rl')
+#     sys.path.insert(0, rsl_rl_path)
+#
+#     # Import RSL-RL components directly
+#     from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+#     from rsl_rl.env.vec_env import VecEnv
+#     RSL_RL_AVAILABLE = True
+#
+#     # Patch the git repository handling to avoid errors with invalid git repos
+#     import rsl_rl.utils.utils as rsl_utils
+#     original_store_code_state = rsl_utils.store_code_state
+#
+#     def safe_store_code_state(logdir, repositories):
+#         """Safe version of store_code_state that filters out invalid git repositories."""
+#         valid_repositories = []
+#         for repo_path in repositories:
+#             try:
+#                 import git
+#                 # Check if this is a valid git repository
+#                 git.Repo(repo_path, search_parent_directories=True)
+#                 valid_repositories.append(repo_path)
+#             except (git.exc.InvalidGitRepositoryError, Exception):
+#                 # Skip invalid git repositories
+#                 continue
+#
+#         if valid_repositories:
+#             original_store_code_state(logdir, valid_repositories)
+#
+#     # Replace the function
+#     rsl_utils.store_code_state = safe_store_code_state
+#
+# except ImportError as e:
+#     RSL_RL_AVAILABLE = False
+#     print_warning(f"rsl_rl not available: {e}")
+#     print_warning("Make sure the rsl_rl directory exists in externals/")
+#
+# # Wrapper class to make existing environments compatible with rsl_rl's VecEnv interface
+# class RSLRLEnvWrapper(VecEnv):
+#     """Wrapper to make existing environments compatible with rsl_rl's VecEnv interface."""
+#
+#     def __init__(self, env):
+#         self.env = env
+#         self.num_envs = env.num_envs
+#         self.num_obs = env.num_obs
+#         self.num_actions = env.num_actions
+#         self.max_episode_length = getattr(env, 'max_episode_length', 1000)
+#         self.device = getattr(env, 'device', torch.device('cpu'))
+#
+#         # Initialize buffers
+#         self.obs_buf = torch.zeros(self.num_envs, self.num_obs, device=self.device)
+#         self.rew_buf = torch.zeros(self.num_envs, device=self.device)
+#         self.reset_buf = torch.zeros(self.num_envs, device=self.device)
+#         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device)
+#
+#         # Initialize extras with proper structure for RSL-RL
+#         self.extras = {"observations": {}}  # RSL-RL expects this structure
+#
+#         # Get initial observations - handle both tuple and single return values
+#         obs = self.env.reset()
+#         if isinstance(obs, tuple):
+#             self.obs_buf = obs[0].to(self.device)
+#         else:
+#             self.obs_buf = obs.to(self.device)
+#
+#     def get_observations(self):
+#         """Return current observations and extras."""
+#         return self.obs_buf, self.extras
+#
+#     def reset(self):
+#         """Reset all environments."""
+#         obs = self.env.reset()
+#         if isinstance(obs, tuple):
+#             self.obs_buf = obs[0].to(self.device)
+#         else:
+#             self.obs_buf = obs.to(self.device)
+#         self.episode_length_buf.fill_(0)
+#         self.reset_buf.fill_(0)
+#         return self.obs_buf, self.extras
+#
+#     def step(self, actions):
+#         """Apply actions to environments."""
+#         step_result = self.env.step(actions)
+#
+#         # Handle different step return formats
+#         if len(step_result) == 4:
+#             obs, rewards, dones, info = step_result
+#         elif len(step_result) == 3:
+#             obs, rewards, dones = step_result
+#             info = {}
+#         else:
+#             raise ValueError(f"Unexpected step return format: {len(step_result)} values")
+#
+#         # Update buffers
+#         self.obs_buf = obs.to(self.device)
+#         self.rew_buf = rewards.to(self.device)
+#         self.reset_buf = dones.to(self.device)
+#         self.episode_length_buf += 1
+#
+#         # Handle episode resets
+#         if self.reset_buf.any():
+#             self.episode_length_buf[self.reset_buf] = 0
+#
+#         # Update extras with info from the environment
+#         self.extras.update(info)
+#
+#         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+#
+#     def get_attr(self, attr_name, indices=None):
+#         """Get environment attribute."""
+#         return getattr(self.env, attr_name)
+#
+#     def set_attr(self, attr_name, value, indices=None):
+#         """Set environment attribute."""
+#         setattr(self.env, attr_name, value)
 
 try:
     from svg.train import Workspace
@@ -187,55 +314,93 @@ def train(cfg: DictConfig):
             # Change mode to play and use the sim2mujoco env
             cfg.env.config.no_grad = True
 
-            # first shuffle around config structure
-            cfg_train = cfg_full["alg"]
-            cfg_train["params"]["general"] = cfg_full["general"]
-            env_name = cfg_train["params"]["config"]["env_name"]
-            cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
-            cfg_train["params"]["general"]["logdir"] = logdir
-
-            # boilerplate to get rl_games working
-            # Set mode to play even if train is true
-            cfg_train["params"]["general"]["play"] = True
-            cfg_train["params"]["general"]["train"] = False
-
-            # Set num_envs and eval games correctly based on mujoco settings
-            num_envs = cfg["env"]["mujoco"]["config"]["num_envs"]
-            cfg["env"]["ppo"]["num_actors"] = num_envs
-            num_games = cfg["env"]["mujoco"]["config"]["num_games"]
-            cfg_train["params"]["config"]["player"]["games_num"] = num_games
-
-            # Now handle different env instantiation
-            if env_name.split("_")[0] == "df":
-                cfg_train["params"]["config"]["env_name"] = "dflex"
-            elif env_name.split("_")[0] == "warp":
-                cfg_train["params"]["config"]["env_name"] = "warp"
-            env_name = cfg_train["params"]["diff_env"]["_target_"]
-            cfg_train["params"]["diff_env"]["name"] = env_name.split(".")[-1]
-
-            # save config
-            if cfg_train["params"]["general"]["train"]:
+            # Check if we should use rsl_rl instead of rl_games
+            if cfg.alg.name == "ppo" and cfg.alg.get("use_rsl_rl", False) and RSL_RL_AVAILABLE:
+                # Use rsl_rl for PPO training
+                print("Using rsl_rl for PPO training (sim2mujoco)")
+                
+                # Create environment and wrap it for rsl_rl compatibility
+                # Override num_envs if num_actors is specified in env config
+                if hasattr(cfg.env, 'ppo') and hasattr(cfg.env.ppo, 'num_actors'):
+                    cfg.env.mujoco.config.num_envs = cfg.env.ppo.num_actors
+                    print(f"Setting num_envs to {cfg.env.ppo.num_actors} for RSL-RL training (sim2mujoco)")
+                
+                env = instantiate(cfg.env.mujoco.config)
+                env = RSLRLEnvWrapper(env)
+                
+                # Set up rsl_rl training configuration
+                train_cfg = cfg_full["alg"]["params"]
+                train_cfg["max_iterations"] = cfg_full["alg"]["params"].get("max_iterations", 5000)
+                
+                # Create runner
+                runner = OnPolicyRunner(env, train_cfg, log_dir=logdir, device=cfg.general.device)
+                
+                # Load checkpoint if specified
+                if cfg.general.checkpoint:
+                    print(f"Loading checkpoint from: {cfg.general.checkpoint}")
+                    runner.load(cfg.general.checkpoint)
+                
+                # Save config
                 os.makedirs(logdir, exist_ok=True)
-                yaml.dump(cfg_train, open(os.path.join(logdir, "cfg.yaml"), "w"))
+                yaml.dump(cfg_full, open(os.path.join(logdir, "cfg.yaml"), "w"))
+                
+                # Train
+                if cfg.general.train:
+                    runner.learn(num_learning_iterations=train_cfg["max_iterations"])
+                else:
+                    env.eval(runner, cfg)
 
-            # register envs with the correct number of actors for PPO
-            if cfg.alg.name == "ppo":
-                cfg["env"]["config"]["num_envs"] = cfg["env"]["ppo"]["num_actors"]
             else:
-                cfg["env"]["config"]["num_envs"] = cfg["env"]["sac"]["num_actors"]
+                # Use rl_games (original logic)
+                # first shuffle around config structure
+                cfg_train = cfg_full["alg"]
+                cfg_train["params"]["general"] = cfg_full["general"]
+                env_name = cfg_train["params"]["config"]["env_name"]
+                cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
+                cfg_train["params"]["general"]["logdir"] = logdir
 
-            register_envs(cfg.env.mujoco)
+                # boilerplate to get rl_games working
+                # Set mode to play even if train is true
+                cfg_train["params"]["general"]["play"] = True
+                cfg_train["params"]["general"]["train"] = False
 
-            # add observer to score keys
-            if cfg_train["params"]["config"].get("score_keys"):
-                algo_observer = RLGPUEnvAlgoObserver()
-            else:
-                algo_observer = None
+                # Set num_envs and eval games correctly based on mujoco settings
+                num_envs = cfg["env"]["mujoco"]["config"]["num_actors"]
+                cfg["env"]["ppo"]["num_actors"] = num_envs
+                num_games = cfg["env"]["mujoco"]["config"]["num_games"]
+                cfg_train["params"]["config"]["player"]["games_num"] = num_games
 
-            runner = Runner(algo_observer)
-            runner.load(cfg_train)
-            runner.reset()
-            runner.run(cfg_train["params"]["general"])
+                # Now handle different env instantiation
+                if env_name.split("_")[0] == "df":
+                    cfg_train["params"]["config"]["env_name"] = "dflex"
+                elif env_name.split("_")[0] == "warp":
+                    cfg_train["params"]["config"]["env_name"] = "warp"
+                env_name = cfg_train["params"]["diff_env"]["_target_"]
+                cfg_train["params"]["diff_env"]["name"] = env_name.split(".")[-1]
+
+                # save config
+                if cfg_train["params"]["general"]["train"]:
+                    os.makedirs(logdir, exist_ok=True)
+                    yaml.dump(cfg_train, open(os.path.join(logdir, "cfg.yaml"), "w"))
+
+                # register envs with the correct number of actors for PPO
+                if cfg.alg.name == "ppo":
+                    cfg["env"]["config"]["num_envs"] = cfg["env"]["ppo"]["num_actors"]
+                else:
+                    cfg["env"]["config"]["num_envs"] = cfg["env"]["sac"]["num_actors"]
+
+                register_envs(cfg.env.mujoco)
+
+                # add observer to score keys
+                if cfg_train["params"]["config"].get("score_keys"):
+                    algo_observer = RLGPUEnvAlgoObserver()
+                else:
+                    algo_observer = None
+
+                runner = Runner(algo_observer)
+                runner.load(cfg_train)
+                runner.reset()
+                runner.run(cfg_train["params"]["general"])
         else:
             cfg.env.config.no_grad = True
 
@@ -280,48 +445,84 @@ def train(cfg: DictConfig):
         # PPO doesn't need env grads
         cfg.env.config.no_grad = True
 
-        # first shuffle around config structure
-        cfg_train = cfg_full["alg"]
-        cfg_train["params"]["general"] = cfg_full["general"]
-        env_name = cfg_train["params"]["config"]["env_name"]
-        cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
-        cfg_train["params"]["general"]["logdir"] = logdir
-        cfg_train["params"]["config"]["train_dir"] = logdir
-
-        # boilerplate to get rl_games working
-        cfg_train["params"]["general"]["play"] = not cfg_train["params"]["general"][
-            "train"
-        ]
-
-        # Now handle different env instantiation
-        if env_name.split("_")[0] == "df":
-            cfg_train["params"]["config"]["env_name"] = "dflex"
-        elif env_name.split("_")[0] == "warp":
-            cfg_train["params"]["config"]["env_name"] = "warp"
-        env_name = cfg_train["params"]["diff_env"]["_target_"]
-        cfg_train["params"]["diff_env"]["name"] = env_name.split(".")[-1]
-
-        # save config
-        if cfg_train["params"]["general"]["train"]:
+        # Check if we should use rsl_rl instead of rl_games
+        if cfg.alg.name == "ppo" and cfg.alg.get("use_rsl_rl", False) and RSL_RL_AVAILABLE:
+            # Use rsl_rl for PPO training
+            print("Using rsl_rl for PPO training")
+            
+            # Create environment and wrap it for rsl_rl compatibility
+            # Override num_envs if num_actors is specified in env config
+            if hasattr(cfg.env, 'ppo') and hasattr(cfg.env.ppo, 'num_actors'):
+                cfg.env.config.num_envs = cfg.env.ppo.num_actors
+                print(f"Setting num_envs to {cfg.env.ppo.num_actors} for RSL-RL training")
+            
+            env = instantiate(cfg.env.config)
+            env = RSLRLEnvWrapper(env)
+            
+            # Set up rsl_rl training configuration
+            train_cfg = cfg_full["alg"]["params"]
+            train_cfg["max_iterations"] = cfg_full["alg"]["params"].get("max_iterations", 5000)
+            
+            # Create runner
+            runner = OnPolicyRunner(env, train_cfg, log_dir=logdir, device=cfg.general.device)
+            
+            # Load checkpoint if specified
+            if cfg.general.checkpoint:
+                print(f"Loading checkpoint from: {cfg.general.checkpoint}")
+                runner.load(cfg.general.checkpoint)
+            
+            # Save config
             os.makedirs(logdir, exist_ok=True)
-            yaml.dump(cfg_train, open(os.path.join(logdir, "cfg.yaml"), "w"))
+            yaml.dump(cfg_full, open(os.path.join(logdir, "cfg.yaml"), "w"))
+            
+            # Train
+            if cfg.general.train:
+                runner.learn(num_learning_iterations=train_cfg["max_iterations"])
+            else:
+                env.eval(runner, cfg)
 
-        # register envs with the correct number of actors for PPO
-        if cfg.alg.name == "ppo":
-            cfg["env"]["config"]["num_envs"] = cfg["env"]["ppo"]["num_actors"]
         else:
-            cfg["env"]["config"]["num_envs"] = cfg["env"]["sac"]["num_actors"]
-        register_envs(cfg.env)
+            # Use rl_games (original logic) when RSL-RL is not requested
+            # first shuffle around config structure
+            cfg_train = cfg_full["alg"]
+            cfg_train["params"]["general"] = cfg_full["general"]
+            env_name = cfg_train["params"]["config"]["env_name"]
+            cfg_train["params"]["diff_env"] = cfg_full["env"]["config"]
+            cfg_train["params"]["general"]["logdir"] = logdir
+            cfg_train["params"]["config"]["train_dir"] = logdir
 
-        # add observer to score keys
-        if cfg_train["params"]["config"].get("score_keys"):
-            algo_observer = RLGPUEnvAlgoObserver()
-        else:
-            algo_observer = None
-        runner = Runner(algo_observer)
-        runner.load(cfg_train)
-        runner.reset()
-        runner.run(cfg_train["params"]["general"])
+            # boilerplate to get rl_games working
+            cfg_train["params"]["general"]["play"] = not cfg_train["params"]["general"]["train"]
+
+            # Now handle different env instantiation
+            if env_name.split("_")[0] == "df":
+                cfg_train["params"]["config"]["env_name"] = "dflex"
+            elif env_name.split("_")[0] == "warp":
+                cfg_train["params"]["config"]["env_name"] = "warp"
+            env_name = cfg_train["params"]["diff_env"]["_target_"]
+            cfg_train["params"]["diff_env"]["name"] = env_name.split(".")[-1]
+
+            # save config
+            if cfg_train["params"]["general"]["train"]:
+                os.makedirs(logdir, exist_ok=True)
+                yaml.dump(cfg_train, open(os.path.join(logdir, "cfg.yaml"), "w"))
+
+            # register envs with the correct number of actors for PPO
+            if cfg.alg.name == "ppo":
+                cfg["env"]["config"]["num_envs"] = cfg["env"]["ppo"]["num_actors"]
+            else:
+                cfg["env"]["config"]["num_envs"] = cfg["env"]["sac"]["num_actors"]
+            register_envs(cfg.env)
+
+            # add observer to score keys
+            if cfg_train["params"]["config"].get("score_keys"):
+                algo_observer = RLGPUEnvAlgoObserver()
+            else:
+                algo_observer = None
+            runner = Runner(algo_observer)
+            runner.load(cfg_train)
+            runner.reset()
+            runner.run(cfg_train["params"]["general"])
     elif cfg.alg.name == "svg":
         cfg.env.config.no_grad = True
         with open_dict(cfg):
