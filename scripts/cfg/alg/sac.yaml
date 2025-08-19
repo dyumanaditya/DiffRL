@@ -57,5 +57,5 @@ params:
     player:
       games_num: ${resolve_child:24,${env.player},games_num}
       num_actors: ${resolve_child:3,${env.player},num_actors}
-      determenistic: True
+      deterministic: True
       print_stats: True
