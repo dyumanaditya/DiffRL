@@ -48,15 +48,15 @@ shac:
 
 ppo:
   max_epochs: 500
-  lr: 1e-3
+  lr: 5e-4
   minibatch_size: 24576
   num_actors: 4096
   horizon_length: 24
   save_frequency: 100
   save_best_after: 100
   actor_mlp:
-    units: [128, 128, 128]
-#    units: [512, 256, 128]
+#    units: [128, 128, 128]
+    units: [512, 256, 128]
   scale_value: 0.6
   kl_threshold: 0.01
   critic_coef: 2.0
