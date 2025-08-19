@@ -302,7 +302,7 @@ class DFlexEnv:
 
     def step(self, actions, play=False):
         actions = actions.view((self.num_envs, self.num_actions))
-        actions = torch.clip(actions, -1.0, 1.0)
+        # actions = torch.clip(actions, -1.0, 1.0)
         unscaled_actions = self.unscale_act(actions)
         self.set_act(unscaled_actions)
 
