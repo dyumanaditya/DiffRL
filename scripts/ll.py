@@ -352,7 +352,7 @@ def main(cfg: DictConfig):
     # Defaults for landscape-related args (can be overridden with `landscape.*`)
     default_landscape = {
         "grid": 21,        # grid size per axis
-        "span": 0.005,       # +/- range of alphas/betas
+        "span": 0.01,       # +/- range of alphas/betas
         "episodes": 1,     # eval episodes per grid point
         "seed": 0,         # direction RNG seed
         "normalize": "filter",  # "filter" or "layer"
