@@ -195,7 +195,7 @@ class Go2VelocityEnv(DFlexEnv):
         """Sample new velocity commands for specified environments"""
         # Sample linear velocity commands (x, z) and angular velocity (y)
         # Following IsaacLab pattern: uniform distribution between -1 and 1
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-0.5, 0.5)
         # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
         #     [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
         # )
@@ -777,7 +777,7 @@ class Go2VelocityEnv(DFlexEnv):
             # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
             # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
             "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
