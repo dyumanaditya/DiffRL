@@ -103,15 +103,39 @@ class RSLRLEnvWrapper(VecEnv):
         else:
             raise ValueError(f"Unexpected step return format: {len(step_result)} values")
 
-        # Update buffers
+        # Update buffers - ensure proper shapes
         self.obs_buf = obs.to(self.device)
         self.rew_buf = rewards.to(self.device)
-        self.reset_buf = dones.to(self.device)
+        
+        # Ensure dones has the right shape for indexing
+        if dones.dim() > 1:
+            # If dones has multiple dimensions, flatten it
+            self.reset_buf = dones.flatten().to(self.device)
+        else:
+            self.reset_buf = dones.to(self.device)
+        
+        # Ensure episode_length_buf has the right shape
+        if self.episode_length_buf.dim() != self.reset_buf.dim():
+            # Reshape episode_length_buf to match reset_buf
+            if self.reset_buf.dim() == 1:
+                self.episode_length_buf = self.episode_length_buf.flatten()
+            else:
+                self.episode_length_buf = self.episode_length_buf.reshape_as(self.reset_buf)
+        
         self.episode_length_buf += 1
 
-        # Handle episode resets
+        # Handle episode resets - use safe indexing
         if self.reset_buf.any():
-            self.episode_length_buf[self.reset_buf] = 0
+            # Create a mask for environments that need reset
+            reset_mask = self.reset_buf.bool()
+            if reset_mask.dim() == 1:
+                self.episode_length_buf[reset_mask] = 0
+            else:
+                # If multi-dimensional, flatten and index
+                flat_mask = reset_mask.flatten()
+                flat_episode_length = self.episode_length_buf.flatten()
+                flat_episode_length[flat_mask] = 0
+                self.episode_length_buf = flat_episode_length.reshape_as(self.reset_buf)
 
         # Update extras with info from the environment
         self.extras.update(info)

@@ -50,7 +50,7 @@ class Go2VelocityMujocoEnv:
     ):
         self.num_envs = num_envs
         self.num_actions = 12
-        self.num_obs = 49
+        self.num_obs = 48
         self.episode_length = episode_length
         self.stochastic_init = stochastic_init
         self.early_termination = early_termination
@@ -142,6 +142,8 @@ class Go2VelocityMujocoEnv:
         self._feet_contact_history = torch.zeros((self.num_envs, 4), dtype=torch.bool, device=self.device)
         self._feet_air_time_counter = torch.zeros((self.num_envs, 4), dtype=self.dtype, device=self.device)
         self._current_step = 0
+
+        self.torso_height = torch.zeros(self.num_envs, 1, dtype=self.dtype, device=self.device)
         
         # Feet contact links (matching DFlex)
         self.feet_contact_links = [11, 20, 29, 38]  # FL, FR, RL, RR
@@ -226,7 +228,7 @@ class Go2VelocityMujocoEnv:
     def _set_initial_state(self):
         """Set initial state for the robot"""
         # Set initial position (floating base)
-        self.data.qpos[:3] = [0.0, 0.0, 0.38]  # x, y, z
+        self.data.qpos[:3] = [0.0, 0.0, 0.35]  # x, y, z
         
         # Set initial orientation (quaternion)
         self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
@@ -456,7 +458,7 @@ class Go2VelocityMujocoEnv:
         projected_gravity_b = tu.quat_rotate_inverse(torso_quat, g_world)
 
         # Torso height in DFLEX (Y-up)
-        torso_height = torso_pos_df_w[:, 1].clone().unsqueeze(1)
+        self.torso_height = torso_pos_df_w[:, 1].clone().unsqueeze(1)
 
         # Ensure joint dims match defaults (DFLEX obs layout)
         default_joint_pos = self.default_joint_pos.to(dtype=dtype, device=device)
@@ -488,7 +490,7 @@ class Go2VelocityMujocoEnv:
                 joint_pos - default_joint_pos,  # 12:...
                 joint_vel,  # ...
                 self._actions.clone().to(dtype),  # 36:48
-                torso_height,  # 48:49
+                # torso_height,  # 48:49
             ],
             dim=-1,
         )
@@ -563,8 +565,8 @@ class Go2VelocityMujocoEnv:
         
         # Check height termination
         if self.early_termination:
-            torso_height = obs[:, 48]
-            termination = termination | (torso_height < self.termination_height)
+            # torso_height = obs[:, 48]
+            termination = termination | (self.torso_height < self.termination_height)
             
         # Check episode length
         if self.step_count >= self.episode_length:
