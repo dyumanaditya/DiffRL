@@ -5,7 +5,7 @@ params:
   algorithm:
     class_name: PPO
     num_learning_epochs: 5
-    num_mini_batches: 1
+    num_mini_batches: 4
     clip_param: 0.2
     gamma: 0.99
     lam: 0.95
@@ -15,7 +15,7 @@ params:
     max_grad_norm: 1.0
     use_clipped_value_loss: True
     schedule: adaptive
-    desired_kl: ${oc.select:env.ppo.kl_threshold, 0.008}
+    desired_kl: ${oc.select:env.ppo.kl_threshold, 0.01}
 
   policy:
     class_name: ActorCritic
