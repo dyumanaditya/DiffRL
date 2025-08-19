@@ -19,9 +19,9 @@ config:
 
   contact:
     ke: 6e3  # Nominal stiffness for elastic contact
-    kd: 4e3  # Nominal damping for elastic contact
+    kd: 5e3  # Nominal damping for elastic contact
     kf: 5e2  # Nominal friction for elastic contact
-    mu: 0.75  # Nominal friction coefficient for elastic contact
+    mu: 0.9  # Nominal friction coefficient for elastic contact
 
 mujoco:
   config:
@@ -48,7 +48,7 @@ shac:
 
 ppo:
   max_epochs: 500
-  lr: 5e-4
+  lr: 3e-4
   minibatch_size: 24576
   num_actors: 4096
   horizon_length: 24
