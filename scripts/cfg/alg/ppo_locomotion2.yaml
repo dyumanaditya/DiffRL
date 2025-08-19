@@ -1,0 +1,164 @@
+params:
+  seed: 42  # No default - must be specified
+
+  # Algorithm configuration
+  algo:
+    name: a2c_continuous  # No default - must be specified
+
+  # Model configuration
+  model:
+    name: continuous_a2c_logstd  # No default - must be specified
+
+  # Network architecture configuration
+  network:
+    name: actor_critic  # No default - must be specified
+    separate: True     # Default: False (shared network)
+    
+    # Action space configuration for continuous actions
+    space:
+      continuous:
+        mu_activation: None        # Default: None (linear activation)
+        sigma_activation: None     # Default: None (linear activation)
+        
+        # Weight initialization for mean
+        mu_init:
+          name: orthogonal_initializer  # Default: 'default' (no initialization)
+          gain: 0.01                    # Default: 1.0
+        
+#        # Weight initialization for standard deviation
+#        sigma_init:
+#          name: const_initializer       # Default: 'default' (no initialization)
+#          val: -1.0                     # Default: 0.0
+        
+#        fixed_sigma: False              # Default: True
+    
+    # MLP architecture
+    mlp:
+      units: ${oc.select:env.ppo.actor_mlp.units, [128, 128, 128]}           # Default: [64] (single layer)
+      activation: elu                   # Default: 'relu'
+      d2rl: False                      # Default: False
+      
+      # Weight initialization
+      initializer:
+        name: orthogonal_initializer    # Default: 'default' (no initialization)
+        gain: 1.414                    # Default: 1.0
+      
+      # Regularization
+      regularizer:
+        name: None                      # Default: 'None'
+
+  # Main training configuration
+  config:
+    name: ${env.name}_ppo_legged       # No default - must be specified
+#    full_experiment_name: "LeggedLocomotion_PPO_v1"  # Default: None (auto-generated)
+    env_name: ${env.name}          # No default - must be specified
+    
+    # Hardware and performance settings
+    multi_gpu: False                   # Default: False
+    ppo: True
+    mixed_precision: False              # Default: False
+#    device: "cuda:0"                   # Default: 'cuda:0'
+    
+    # Input/output normalization
+#    normalize_input: True              # Default: False
+#    normalize_value: True              # Default: False
+    normalize_advantage: True          # Default: False
+#    normalize_rms_advantage: False     # Default: False
+#    adv_rms_momentum: 0.5             # Default: 0.5
+    
+    # Reward shaping
+    reward_shaper:
+      scale_value: 1.0                 # Default: 1.0
+    
+    # Learning rate and scheduling
+    learning_rate: 3e-4                # No default - must be specified
+    lr_schedule: adaptive              # Default: None (constant LR)
+    schedule_entropy: False            # Default: False
+    
+    # PPO-specific parameters
+    e_clip: 0.2                        # Default: 0.2
+    kl_threshold: 0.008                # Default: 0.008
+    clip_value: False                  # Default: False
+    
+    # Training hyperparameters
+    gamma: 0.99                        # Default: 0.99
+    tau: 0.95                          # Default: 0.95
+    horizon_length: 16                 # No default - must be specified
+    num_actors: 4096                   # No default - must be specified
+    minibatch_size: 32768              # Default: calculated from minibatch_size_per_env
+    mini_epochs: 5                     # Default: 5
+    
+    # Loss coefficients
+    entropy_coef: 0.0                  # Default: 0.0
+    critic_coef: 2.0                   # Default: 2.0
+    bounds_loss_coef: 0.0001           # Default: None (no bounds loss)
+    bound_loss_type: regularisation    # Default: 'bound'
+    
+    # Gradient handling
+    grad_norm: 1.0                     # Default: 1.0
+    truncate_grads: True               # Default: False
+    weight_decay: 0.0                  # Default: 0.0
+    
+    # Training duration
+    max_epochs: 1000                   # Default: -1 (no limit)
+    max_frames: -1                     # Default: -1 (no limit)
+    score_to_win: 20000                # Default: 1000000000
+    
+    # Checkpointing and logging
+    save_frequency: 50                 # Default: 0 (no saving)
+    save_best_after: 100               # Default: 100
+    
+    # Smoothing and stability
+    use_smooth_clamp: True             # Default: False
+    value_bootstrap: True              # Default: None (no bootstrap)
+    
+    # Additional parameters with defaults
+    print_stats: True                  # Default: True
+    games_to_track: 100               # Default: 100
+    seq_length: 4                     # Default: 4
+    bptt_length: 4                    # Default: seq_length
+    zero_rnn_on_done: True            # Default: True
+    epochs_between_resets: 0          # Default: 0
+    use_action_masks: False           # Default: False
+    is_train: True                    # Default: True
+    population_based_training: False  # Default: False
+    use_diagnostics: False            # Default: False
+    schedule_type: legacy             # Default: 'legacy'
+    freeze_critic: False              # Default: False
+    clip_actions: True                # Default: True
+    
+    # Paths and directories
+    network_path: "./nn/"             # Default: "./nn/"
+    log_path: "runs/"                 # Default: "runs/"
+    train_dir: "runs"                 # Default: "runs"
+    
+    # Environment configuration
+    env_config:
+      env_name: "ant"                  # No default - must be specified
+      # Add any environment-specific parameters here
+      
+    # Player configuration (for evaluation/rendering)
+    player:
+      render: False                    # Default: False
+      deterministic: True              # Default: False
+      games_num: 1000000000           # Default: 1000000000
+      n_game_life: 1                  # Default: 1
+      print_stats: True               # Default: True
+      render_sleep: 0.002             # Default: 0.002
+      evaluation: False               # Default: False
+      update_checkpoint_freq: 100     # Default: 100
+      use_vecenv: False               # Default: False
+      balance_env_rewards: False      # Default: False
+      clip_actions: True              # Default: True
+      
+    # Features and observers
+    features:
+      observer:
+        name: DefaultObserver          # No default - must be specified
+      
+      # Optional: Soft augmentation for improved generalization
+      soft_augmentation:
+        name: SoftAugmentation
+        params:
+          # Augmentation parameters
+          pass
