@@ -28,7 +28,7 @@
 
 # Loop for the first command
 for seed in {42..46}; do
-  python train.py alg=ahac env=hopper general.seed=$seed env.shac.max_epochs=1000 general.logdir=AhacLowHighStiffness1000
+  python train.py alg=ahac env=hopper general.seed=$seed env.shac.max_epochs=500 general.logdir=AhacLowHighStiffness500
 done
 
 # Loop for the second command (with contact config)
@@ -36,9 +36,9 @@ for seed in {42..46}; do
   python train.py \
     alg=ahac \
     env=hopper \
-    env.config.contact.ke=3e6 \
-    env.config.contact.kd=3e5 \
+    env.config.contact.ke=6e5 \
+    env.config.contact.kd=6e4 \
     general.seed=$seed \
-    env.shac.max_epochs=1000 \
-    general.logdir=AhacLowHighStiffness1000
+    env.shac.max_epochs=500 \
+    general.logdir=AhacLowHighStiffness500
 done
