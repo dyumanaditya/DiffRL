@@ -109,9 +109,9 @@ class Go2VelocityEnv(DFlexEnv):
         self.torso_height = torch.zeros(self.num_envs, device=self.device) + 0.35  # Initial height
         
         # Rewards: Following IsaacLab reward structure
-        self.lin_vel_reward_scale = 4.0
+        self.lin_vel_reward_scale = 5.0
         # self.lin_vel_reward_scale = 1.0
-        self.yaw_rate_reward_scale = 2.0
+        self.yaw_rate_reward_scale = 3.0
         self.yaw_rate_reward_scale = 0.5
         self.z_vel_reward_scale = -4.0
         self.ang_vel_reward_scale = -0.05
@@ -598,8 +598,8 @@ class Go2VelocityEnv(DFlexEnv):
                     "obs/joint_pos_std": joint_pos.std().item(),
                     "obs/joint_vel_mean": joint_vel.mean().item(),
                     "obs/joint_vel_std": joint_vel.std().item(),
-                    "obs/torso_height_mean": torso_height.mean().item(),
-                    "obs/torso_height_std": torso_height.std().item(),
+                    "obs/torso_height_mean": self.torso_height.mean().item(),
+                    "obs/torso_height_std": self.torso_height.std().item(),
                     "action/mean": self._actions.mean().item(),
                     "action/std": self._actions.std().item(),
                 }
