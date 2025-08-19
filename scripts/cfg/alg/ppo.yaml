@@ -71,5 +71,5 @@ params:
     player:
       games_num: ${oc.select:env.player.games_num, 24}
       num_actors: ${oc.select:env.player.num_actors, 3}
-      determenistic: True
+      deterministic: True
       print_stats: True

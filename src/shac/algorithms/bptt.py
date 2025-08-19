@@ -99,7 +99,7 @@ class BPTT:
             self.stochastic_evaluation = True
         else:
             self.stochastic_evaluation = not (
-                cfg["params"]["config"]["player"].get("determenistic", False)
+                cfg["params"]["config"]["player"].get("deterministic", False)
                 or cfg["params"]["config"]["player"].get("deterministic", False)
             )
             self.steps_num = self.env.episode_length
