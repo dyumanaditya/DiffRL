@@ -65,7 +65,7 @@ class Go2VelocityEnv(DFlexEnv):
     ):
         num_obs = 49
         num_act = 12
-        self.playback_speed = 1/60
+        self.playback_speed = 1/16
 
         super(Go2VelocityEnv, self).__init__(
             num_envs,
@@ -104,6 +104,9 @@ class Go2VelocityEnv(DFlexEnv):
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)  # [lin_vel_x, lin_vel_y, ang_vel_z]
         self._previous_actions = torch.zeros(self.num_envs, num_act, device=self.device)
         self._actions = torch.zeros(self.num_envs, num_act, device=self.device)
+
+        # Torso height for early termination
+        self.torso_height = torch.zeros(self.num_envs, device=self.device) + 0.35  # Initial height
         
         # Rewards: Following IsaacLab reward structure
         self.lin_vel_reward_scale = 4.0
@@ -197,7 +200,7 @@ class Go2VelocityEnv(DFlexEnv):
         # Following IsaacLab pattern: uniform distribution between -1 and 1
         self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-0.5, 0.5)
         # self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]) + torch.tensor(
-        #     [1.0, 0.0, 0.0], device=self.device, dtype=torch.float32
+        #     [0.5, 0.0, 0.0], device=self.device, dtype=torch.float32
         # )
 
         # Optionally scale commands to more realistic ranges
@@ -425,7 +428,7 @@ class Go2VelocityEnv(DFlexEnv):
         termination = termination | nonfinite_mask | invalid_value_mask
 
         if self.early_termination:
-            termination = termination | (obs[:, 48] < self.termination_height)
+            termination = termination | (self.torso_height < self.termination_height)
             
         # Log termination statistics to wandb if enabled
         if self.wandb_enabled and termination.any():
@@ -533,7 +536,7 @@ class Go2VelocityEnv(DFlexEnv):
         # print()
 
         # Torso height
-        torso_height = torso_pos[:, 1].clone()
+        self.torso_height = torso_pos[:, 1].clone()
 
         # Velocity in body frame
         # print("Before transformation linear")
@@ -578,7 +581,7 @@ class Go2VelocityEnv(DFlexEnv):
                 joint_pos - self.default_joint_pos,  # 12:24
                 joint_vel,                           # 24:36
                 self._actions.clone(),               # 36:48
-                torso_height.unsqueeze(1),           # 48:49 (optional, can be used for height tracking)
+                # self.torso_height.unsqueeze(1),           # 48:49 (optional, can be used for height tracking)
             ],
             dim=-1,
         )

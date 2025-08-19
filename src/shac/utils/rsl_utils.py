@@ -130,21 +130,59 @@ class RSLRLEnvWrapper(VecEnv):
         # Evaluation mode - run a simple evaluation loop
         print("Running evaluation...")
         runner.eval_mode()  # Switch to evaluation mode
-
+        
+        # Get the actor-critic directly from the algorithm
+        actor_critic = runner.alg.actor_critic
+        
+        # Check if empirical normalization is used
+        use_normalization = hasattr(runner, 'empirical_normalization') and runner.empirical_normalization
+        if use_normalization:
+            obs_normalizer = runner.obs_normalizer
+            print("Using empirical observation normalization")
+        else:
+            obs_normalizer = None
+            print("No observation normalization")
+        
+        # Ensure environment is in evaluation mode
+        if hasattr(runner.env.env, 'set_eval'):
+            runner.env.env.set_eval(True)
+        if hasattr(runner.env.env, 'eval'):
+            runner.env.env.eval()
+        
+        # Set deterministic actions for evaluation
+        if hasattr(runner.alg, 'set_eval'):
+            runner.alg.set_eval(True)
+        
         # Run evaluation for a few episodes
         num_eval_episodes = 10
         total_reward = 0.0
         total_steps = 0
+        
+        # Get episode length from environment config
+        max_episode_length = getattr(runner.env.env, 'episode_length', 1000)
+        print(f"Max episode length: {max_episode_length}")
 
         for episode in range(num_eval_episodes):
             obs, extras = runner.env.reset()
             episode_reward = 0.0
             episode_steps = 0
             done = False
+            
+            # Reset episode-specific variables
+            if hasattr(runner.env.env, 'reset_episode'):
+                runner.env.env.reset_episode()
 
-            while not done:
-                # Get action from the trained policy
-                actions = runner.alg.act(obs, obs)  # Use obs for both actor and critic
+            while not done and episode_steps < max_episode_length:
+                # Normalize observations if normalization is used
+                if use_normalization:
+                    normalized_obs = obs_normalizer(obs)
+                else:
+                    normalized_obs = obs
+                
+                # Get action from the policy using torch inference mode
+                with torch.inference_mode():
+                    actions = actor_critic.act_inference(normalized_obs)
+                
                 obs, rewards, dones, infos = runner.env.step(actions)
                 episode_reward += rewards.sum().item()
                 episode_steps += 1
@@ -154,9 +192,19 @@ class RSLRLEnvWrapper(VecEnv):
                 if cfg.general.render:
                     runner.env.env.render()
 
+            # Handle episode termination
+            if episode_steps >= max_episode_length:
+                print(f"Episode {episode + 1} terminated at max length {max_episode_length}")
+            
             total_reward += episode_reward
             total_steps += episode_steps
             print(f"Episode {episode + 1}: Reward = {episode_reward:.2f}, Steps = {episode_steps}")
 
         print(f"Average reward over {num_eval_episodes} episodes: {total_reward / num_eval_episodes:.2f}")
         print(f"Average steps over {num_eval_episodes} episodes: {total_steps / num_eval_episodes:.1f}")
+        
+        # Restore training mode if needed
+        if hasattr(runner.env.env, 'set_eval'):
+            runner.env.env.set_eval(False)
+        if hasattr(runner.alg, 'set_eval'):
+            runner.alg.set_eval(False)

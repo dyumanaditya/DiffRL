@@ -320,10 +320,9 @@ def train(cfg: DictConfig):
                 print("Using rsl_rl for PPO training (sim2mujoco)")
                 
                 # Create environment and wrap it for rsl_rl compatibility
-                # Override num_envs if num_actors is specified in env config
-                if hasattr(cfg.env, 'ppo') and hasattr(cfg.env.ppo, 'num_actors'):
-                    cfg.env.mujoco.config.num_envs = cfg.env.ppo.num_actors
-                    print(f"Setting num_envs to {cfg.env.ppo.num_actors} for RSL-RL training (sim2mujoco)")
+                # For sim2mujoco, always use single environment and evaluation mode
+                cfg.env.mujoco.config.num_envs = 1
+                print("Setting num_envs to 1 for sim2mujoco (always single environment)")
                 
                 env = instantiate(cfg.env.mujoco.config)
                 env = RSLRLEnvWrapper(env)
@@ -344,11 +343,9 @@ def train(cfg: DictConfig):
                 os.makedirs(logdir, exist_ok=True)
                 yaml.dump(cfg_full, open(os.path.join(logdir, "cfg.yaml"), "w"))
                 
-                # Train
-                if cfg.general.train:
-                    runner.learn(num_learning_iterations=train_cfg["max_iterations"])
-                else:
-                    env.eval(runner, cfg)
+                # For sim2mujoco, always run evaluation (never training)
+                print("Sim2mujoco mode: Always running evaluation")
+                env.eval(runner, cfg)
 
             else:
                 # Use rl_games (original logic)
@@ -404,9 +401,13 @@ def train(cfg: DictConfig):
         else:
             cfg.env.config.no_grad = True
 
-            # Set mode to play even if train is true
-            # cfg["general"]["play"] = True
+            # For sim2mujoco, always use single environment and evaluation mode
+            cfg.env.mujoco.config.num_envs = 1
+            print("Setting num_envs to 1 for sim2mujoco (always single environment)")
+            
+            # Set mode to evaluation (never training for sim2mujoco)
             cfg["general"]["train"] = False
+            print("Sim2mujoco mode: Always running evaluation")
 
             # Set num_envs and eval games correctly based on mujoco settings
             num_envs = cfg["env"]["mujoco"]["config"]["num_envs"]
@@ -419,10 +420,8 @@ def train(cfg: DictConfig):
             if cfg.general.checkpoint:
                 algo.load(cfg.general.checkpoint)
 
-            if cfg.general.train:
-                algo.train()
-            else:
-                algo.run(cfg.env.player.games_num)
+            # For sim2mujoco, always run evaluation (never training)
+            algo.run(cfg.env.player.games_num)
 
     elif "_target_" in cfg.alg:
         cfg.env.config.no_grad = not cfg.general.train
@@ -455,6 +454,11 @@ def train(cfg: DictConfig):
             if hasattr(cfg.env, 'ppo') and hasattr(cfg.env.ppo, 'num_actors'):
                 cfg.env.config.num_envs = cfg.env.ppo.num_actors
                 print(f"Setting num_envs to {cfg.env.ppo.num_actors} for RSL-RL training")
+            
+            # For evaluation, ensure we use single environment for rendering
+            if not cfg.general.train:
+                cfg.env.config.num_envs = 1
+                print("Setting num_envs to 1 for evaluation")
             
             env = instantiate(cfg.env.config)
             env = RSLRLEnvWrapper(env)
