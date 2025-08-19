@@ -17,6 +17,12 @@ config:
   heigh_rew_scale: 1.0
   wandb: False
 
+  # Observation noise configuration
+  observation_noise: False  # Enable/disable observation noise
+  vel_obs_noise_std: 0.01   # Standard deviation of velocity observation noise (default: 0.01)
+  joint_pos_obs_noise_std: 0.01  # Standard deviation of joint position observation noise (default: 0.01)
+  joint_vel_obs_noise_std: 0.01  # Standard deviation of joint velocity observation noise (default: 0.01)
+
   contact:
     ke: 6e3  # Nominal stiffness for elastic contact
     kd: 5e3  # Nominal damping for elastic contact

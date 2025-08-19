@@ -61,6 +61,10 @@ class Go2VelocityEnv(DFlexEnv):
         heading_rew_scale=1.0,
         heigh_rew_scale=1.0,
         wandb=False,
+        observation_noise=False,
+        vel_obs_noise_std=0.01,
+        joint_pos_obs_noise_std=0.01,
+        joint_vel_obs_noise_std=0.01,
         **kwargs
     ):
         num_obs = 49
@@ -89,6 +93,12 @@ class Go2VelocityEnv(DFlexEnv):
 
         self.early_termination = early_termination
         self.wandb_enabled = wandb and WANDB_AVAILABLE
+
+        # Observation noise parameters
+        self.observation_noise = observation_noise
+        self.vel_obs_noise_std = vel_obs_noise_std
+        self.joint_pos_obs_noise_std = joint_pos_obs_noise_std
+        self.joint_vel_obs_noise_std = joint_vel_obs_noise_std
 
         self.contact_ke = kwargs["contact"]["ke"]
         self.contact_kd = kwargs["contact"]["kd"]
@@ -187,6 +197,10 @@ class Go2VelocityEnv(DFlexEnv):
                     "flat_orientation_reward_scale": self.flat_orientation_reward_scale,
                     "termination_height": self.termination_height,
                     "action_scale": self.action_scale,
+                    "observation_noise": self.observation_noise,
+                    "vel_obs_noise_std": self.vel_obs_noise_std,
+                    "joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
+                    "joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
                 }
             )
             print("Wandb initialized successfully for Go2 velocity environment")
@@ -463,6 +477,10 @@ class Go2VelocityEnv(DFlexEnv):
         # Reset stats
         self.reset_episode_stats(env_ids)
         
+        # Reset noise debug counter for these environments
+        if hasattr(self, '_noise_debug_counter'):
+            self._noise_debug_counter = 0
+        
         return joint_q, joint_qd
 
     def stochastic_init_func(self, env_ids):
@@ -506,6 +524,10 @@ class Go2VelocityEnv(DFlexEnv):
 
         # Reset stats
         self.reset_episode_stats(env_ids)
+        
+        # Reset noise debug counter for these environments
+        if hasattr(self, '_noise_debug_counter'):
+            self._noise_debug_counter = 0
         
         return joint_q, joint_qd
 
@@ -586,6 +608,9 @@ class Go2VelocityEnv(DFlexEnv):
             dim=-1,
         )
         
+        # Apply observation noise if enabled
+        obs = self._apply_observation_noise(obs)
+        
         # Log observation and action statistics to wandb if enabled
         if self.wandb_enabled:
             try:
@@ -603,6 +628,16 @@ class Go2VelocityEnv(DFlexEnv):
                     "action/mean": self._actions.mean().item(),
                     "action/std": self._actions.std().item(),
                 }
+                
+                # Add noise statistics if observation noise is enabled
+                if self.observation_noise:
+                    obs_stats.update({
+                        "noise/vel_obs_noise_std": self.vel_obs_noise_std,
+                        "noise/joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
+                        "noise/joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
+                        "noise/obs_total_std": obs.std().item(),  # Total std of noisy observations
+                    })
+                
                 wandb.log(obs_stats, step=self._current_step)
             except Exception as e:
                 print(f"Failed to log observation/action stats to wandb: {e}")
@@ -924,6 +959,33 @@ class Go2VelocityEnv(DFlexEnv):
             except Exception as e:
                 print(f"Failed to disable wandb: {e}")
 
+    def enable_observation_noise(self, vel_std=None, joint_pos_std=None, joint_vel_std=None):
+        """Enable observation noise with optional custom standard deviations"""
+        self.observation_noise = True
+        if vel_std is not None:
+            self.vel_obs_noise_std = vel_std
+        if joint_pos_std is not None:
+            self.joint_pos_obs_noise_std = joint_pos_std
+        if joint_vel_std is not None:
+            self.joint_vel_obs_noise_std = joint_vel_std
+        print(f"Observation noise enabled: vel_std={self.vel_obs_noise_std}, "
+              f"joint_pos_std={self.joint_pos_obs_noise_std}, "
+              f"joint_vel_std={self.joint_vel_obs_noise_std}")
+
+    def disable_observation_noise(self):
+        """Disable observation noise"""
+        self.observation_noise = False
+        print("Observation noise disabled")
+
+    def get_noise_config(self):
+        """Get current noise configuration"""
+        return {
+            "observation_noise": self.observation_noise,
+            "vel_obs_noise_std": self.vel_obs_noise_std,
+            "joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
+            "joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
+        }
+
     def reset_episode_stats(self, env_ids):
         """Reset episode statistics for specified environments"""
         for key in self._episode_sums.keys():
@@ -939,6 +1001,31 @@ class Go2VelocityEnv(DFlexEnv):
             except Exception as e:
                 print(f"Failed to log episode reset to wandb: {e}")
                 self.wandb_enabled = False
+
+    def _apply_observation_noise(self, obs):
+        """Apply noise to observations if observation_noise is enabled"""
+        if not self.observation_noise:
+            return obs
+        
+        # Create a copy to avoid modifying the original
+        noisy_obs = obs.clone()
+        
+        # Apply noise to velocity observations (indices 0:6 for lin_vel_b and ang_vel_b)
+        if self.vel_obs_noise_std > 0:
+            vel_noise = torch.randn_like(obs[:, :6]) * self.vel_obs_noise_std
+            noisy_obs[:, :6] += vel_noise
+        
+        # Apply noise to joint position observations (indices 12:24)
+        if self.joint_pos_obs_noise_std > 0:
+            joint_pos_noise = torch.randn_like(obs[:, 12:24]) * self.joint_pos_obs_noise_std
+            noisy_obs[:, 12:24] += joint_pos_noise
+        
+        # Apply noise to joint velocity observations (indices 24:36)
+        if self.joint_vel_obs_noise_std > 0:
+            joint_vel_noise = torch.randn_like(obs[:, 24:36]) * self.joint_vel_obs_noise_std
+            noisy_obs[:, 24:36] += joint_vel_noise
+        
+        return noisy_obs
 
     def close(self):
         """Close the environment and wandb logging"""
