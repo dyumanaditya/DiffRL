@@ -56,6 +56,7 @@ ppo:
   save_best_after: 100
   actor_mlp:
     units: [128, 128, 128]
+#    units: [512, 256, 128]
   scale_value: 0.6
   kl_threshold: 0.01
   critic_coef: 2.0
