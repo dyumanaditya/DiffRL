@@ -123,14 +123,14 @@ class Go2VelocityEnv(DFlexEnv):
         # self.lin_vel_reward_scale = 1.0
         self.yaw_rate_reward_scale = 2.0
         # self.yaw_rate_reward_scale = 0.5
-        self.z_vel_reward_scale = -2.0
+        self.z_vel_reward_scale = -0.5
         self.ang_vel_reward_scale = -0.05
         self.joint_torque_reward_scale = -1e-5
         self.joint_accel_reward_scale = -2.5e-7
         self.action_rate_reward_scale = -0.01
         self.feet_air_time_reward_scale = 0.25
         self.undesired_contact_reward_scale = -4.0
-        self.flat_orientation_reward_scale = -4.5
+        self.flat_orientation_reward_scale = -2.0
 
         # Early termination parameters
         self.termination_height = termination_height
@@ -811,11 +811,11 @@ class Go2VelocityEnv(DFlexEnv):
             "track_lin_vel_xy_exp": lin_vel_error_mapped * self.lin_vel_reward_scale * self.sim_dt,
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.yaw_rate_reward_scale * self.sim_dt,
             "lin_vel_z_l2": z_vel_error * self.z_vel_reward_scale * self.sim_dt,
-            # "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
-            # "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
-            # "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
+            "ang_vel_xy_l2": ang_vel_error * self.ang_vel_reward_scale * self.sim_dt,
+            "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
+            "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
             "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }
