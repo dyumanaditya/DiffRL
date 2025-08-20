@@ -19,9 +19,9 @@ config:
 
   # Observation noise configuration
   observation_noise: False  # Enable/disable observation noise
-  vel_obs_noise_std: 0.01   # Standard deviation of velocity observation noise (default: 0.01)
-  joint_pos_obs_noise_std: 0.01  # Standard deviation of joint position observation noise (default: 0.01)
-  joint_vel_obs_noise_std: 0.01  # Standard deviation of joint velocity observation noise (default: 0.01)
+  vel_obs_noise_std: 0.005   # Standard deviation of velocity observation noise (default: 0.01)
+  joint_pos_obs_noise_std: 0.005  # Standard deviation of joint position observation noise (default: 0.01)
+  joint_vel_obs_noise_std: 0.005  # Standard deviation of joint velocity observation noise (default: 0.01)
 
   contact:
     ke: 6e3  # Nominal stiffness for elastic contact
