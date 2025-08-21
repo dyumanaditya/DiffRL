@@ -62,9 +62,17 @@ class Go2VelocityEnv(DFlexEnv):
         heigh_rew_scale=1.0,
         wandb=False,
         observation_noise=False,
-        vel_obs_noise_std=0.01,
-        joint_pos_obs_noise_std=0.01,
-        joint_vel_obs_noise_std=0.01,
+        base_lin_vel_obs_noise=[-0.1, 0.1],
+        base_ang_vel_obs_noise=[-0.2, 0.2],
+        projected_gravity_obs_noise=[-0.05, 0.05],
+        joint_pos_obs_noise=[-0.01, 0.01],
+        joint_vel_obs_noise=[-1.5, 1.5],
+        mass_randomization=False,
+        mass_randomization_bodies=[0],
+        mass_randomization_noise=[-0.5, 0.5],
+        com_randomization=False,
+        com_randomization_bodies=[0],
+        com_randomization_noise=[-0.05, 0.05],
         **kwargs
     ):
         num_obs = 49
@@ -96,9 +104,19 @@ class Go2VelocityEnv(DFlexEnv):
 
         # Observation noise parameters
         self.observation_noise = observation_noise
-        self.vel_obs_noise_std = vel_obs_noise_std
-        self.joint_pos_obs_noise_std = joint_pos_obs_noise_std
-        self.joint_vel_obs_noise_std = joint_vel_obs_noise_std
+        self.base_lin_vel_obs_noise = base_lin_vel_obs_noise
+        self.base_ang_vel_obs_noise = base_ang_vel_obs_noise
+        self.projected_gravity_obs_noise = projected_gravity_obs_noise
+        self.joint_pos_obs_noise = joint_pos_obs_noise
+        self.joint_vel_obs_noise = joint_vel_obs_noise
+        
+        # Mass and COM randomization parameters
+        self.mass_randomization = mass_randomization
+        self.mass_randomization_bodies = mass_randomization_bodies
+        self.mass_randomization_noise = mass_randomization_noise
+        self.com_randomization = com_randomization
+        self.com_randomization_bodies = com_randomization_bodies
+        self.com_randomization_noise = com_randomization_noise
 
         self.contact_ke = kwargs["contact"]["ke"]
         self.contact_kd = kwargs["contact"]["kd"]
@@ -198,9 +216,17 @@ class Go2VelocityEnv(DFlexEnv):
                     "termination_height": self.termination_height,
                     "action_scale": self.action_scale,
                     "observation_noise": self.observation_noise,
-                    "vel_obs_noise_std": self.vel_obs_noise_std,
-                    "joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
-                    "joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
+                    "base_lin_vel_obs_noise": self.base_lin_vel_obs_noise,
+                    "base_ang_vel_obs_noise": self.base_ang_vel_obs_noise,
+                    "projected_gravity_obs_noise": self.projected_gravity_obs_noise,
+                    "joint_pos_obs_noise": self.joint_pos_obs_noise,
+                    "joint_vel_obs_noise": self.joint_vel_obs_noise,
+                    "mass_randomization": self.mass_randomization,
+                    "mass_randomization_bodies": self.mass_randomization_bodies,
+                    "mass_randomization_noise": self.mass_randomization_noise,
+                    "com_randomization": self.com_randomization,
+                    "com_randomization_bodies": self.com_randomization_bodies,
+                    "com_randomization_noise": self.com_randomization_noise,
                 }
             )
             print("Wandb initialized successfully for Go2 velocity environment")
@@ -481,6 +507,10 @@ class Go2VelocityEnv(DFlexEnv):
         if hasattr(self, '_noise_debug_counter'):
             self._noise_debug_counter = 0
         
+        # Apply mass and COM randomization
+        self._apply_mass_randomization(env_ids)
+        self._apply_com_randomization(env_ids)
+        
         return joint_q, joint_qd
 
     def stochastic_init_func(self, env_ids):
@@ -528,6 +558,10 @@ class Go2VelocityEnv(DFlexEnv):
         # Reset noise debug counter for these environments
         if hasattr(self, '_noise_debug_counter'):
             self._noise_debug_counter = 0
+        
+        # Apply mass and COM randomization
+        self._apply_mass_randomization(env_ids)
+        self._apply_com_randomization(env_ids)
         
         return joint_q, joint_qd
 
@@ -632,9 +666,11 @@ class Go2VelocityEnv(DFlexEnv):
                 # Add noise statistics if observation noise is enabled
                 if self.observation_noise:
                     obs_stats.update({
-                        "noise/vel_obs_noise_std": self.vel_obs_noise_std,
-                        "noise/joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
-                        "noise/joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
+                        "noise/base_lin_vel_range": self.base_lin_vel_obs_noise,
+                        "noise/base_ang_vel_range": self.base_ang_vel_obs_noise,
+                        "noise/projected_gravity_range": self.projected_gravity_obs_noise,
+                        "noise/joint_pos_range": self.joint_pos_obs_noise,
+                        "noise/joint_vel_range": self.joint_vel_obs_noise,
                         "noise/obs_total_std": obs.std().item(),  # Total std of noisy observations
                     })
                 
@@ -959,18 +995,25 @@ class Go2VelocityEnv(DFlexEnv):
             except Exception as e:
                 print(f"Failed to disable wandb: {e}")
 
-    def enable_observation_noise(self, vel_std=None, joint_pos_std=None, joint_vel_std=None):
-        """Enable observation noise with optional custom standard deviations"""
+    def enable_observation_noise(self, base_lin_vel_range=None, base_ang_vel_range=None, 
+                                projected_gravity_range=None, joint_pos_range=None, joint_vel_range=None):
+        """Enable observation noise with optional custom ranges"""
         self.observation_noise = True
-        if vel_std is not None:
-            self.vel_obs_noise_std = vel_std
-        if joint_pos_std is not None:
-            self.joint_pos_obs_noise_std = joint_pos_std
-        if joint_vel_std is not None:
-            self.joint_vel_obs_noise_std = joint_vel_std
-        print(f"Observation noise enabled: vel_std={self.vel_obs_noise_std}, "
-              f"joint_pos_std={self.joint_pos_obs_noise_std}, "
-              f"joint_vel_std={self.joint_vel_obs_noise_std}")
+        if base_lin_vel_range is not None:
+            self.base_lin_vel_obs_noise = base_lin_vel_range
+        if base_ang_vel_range is not None:
+            self.base_ang_vel_obs_noise = base_ang_vel_range
+        if projected_gravity_range is not None:
+            self.projected_gravity_obs_noise = projected_gravity_range
+        if joint_pos_range is not None:
+            self.joint_pos_obs_noise = joint_pos_range
+        if joint_vel_range is not None:
+            self.joint_vel_obs_noise = joint_vel_range
+        print(f"Observation noise enabled: base_lin_vel_range={self.base_lin_vel_obs_noise}, "
+              f"base_ang_vel_range={self.base_ang_vel_obs_noise}, "
+              f"projected_gravity_range={self.projected_gravity_obs_noise}, "
+              f"joint_pos_range={self.joint_pos_obs_noise}, "
+              f"joint_vel_range={self.joint_vel_obs_noise}")
 
     def disable_observation_noise(self):
         """Disable observation noise"""
@@ -981,10 +1024,188 @@ class Go2VelocityEnv(DFlexEnv):
         """Get current noise configuration"""
         return {
             "observation_noise": self.observation_noise,
-            "vel_obs_noise_std": self.vel_obs_noise_std,
-            "joint_pos_obs_noise_std": self.joint_pos_obs_noise_std,
-            "joint_vel_obs_noise_std": self.joint_vel_obs_noise_std,
+            "base_lin_vel_obs_noise": self.base_lin_vel_obs_noise,
+            "base_ang_vel_obs_noise": self.base_ang_vel_obs_noise,
+            "projected_gravity_obs_noise": self.projected_gravity_obs_noise,
+            "joint_pos_obs_noise": self.joint_pos_obs_noise,
+            "joint_vel_obs_noise": self.joint_vel_obs_noise,
+            "mass_randomization": self.mass_randomization,
+            "mass_randomization_bodies": self.mass_randomization_bodies,
+            "mass_randomization_noise": self.mass_randomization_noise,
+            "com_randomization": self.com_randomization,
+            "com_randomization_bodies": self.com_randomization_bodies,
+            "com_randomization_noise": self.com_randomization_noise,
         }
+
+    def _apply_mass_randomization(self, env_ids):
+        """Apply mass randomization to specified environments"""
+        if not self.mass_randomization or not self.mass_randomization_bodies:
+            return
+        
+        try:
+            # Get the number of links per environment
+            links_per_env = self.model.link_count // self.num_envs
+            
+            for body_idx in self.mass_randomization_bodies:
+                # Calculate the actual link indices for the specified environments
+                link_indices = [body_idx + i * links_per_env for i in env_ids]
+                
+                for link_idx in link_indices:
+                    if link_idx < self.model.link_count:
+                        # Get current mass from the inertia tensor (body_I_m[3, 3])
+                        current_mass = self.model.body_I_m[link_idx, 3, 3]
+                        
+                        # Apply uniform noise within the specified range
+                        mass_noise = torch.empty(1, device=self.device).uniform_(
+                            self.mass_randomization_noise[0], 
+                            self.mass_randomization_noise[1]
+                        )
+                        
+                        # Scale the noise by the current mass and apply it
+                        new_mass = current_mass * (1.0 + mass_noise.item())
+                        
+                        # Ensure mass stays positive
+                        new_mass = max(new_mass, 0.01)  # Minimum mass of 0.01
+                        
+                        # Apply the new mass to the inertia tensor
+                        # We need to scale the entire inertia tensor proportionally
+                        mass_scale = new_mass / current_mass
+                        self.model.body_I_m[link_idx] *= mass_scale
+
+                    else:
+                        print(f"Warning: Link index {link_idx} out of range (max: {self.model.link_count})")
+        except Exception as e:
+            print(f"Error in mass randomization: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _apply_com_randomization(self, env_ids):
+        """Apply COM randomization to specified environments"""
+        if not self.com_randomization or not self.com_randomization_bodies:
+            return
+        
+        try:
+            # Get the number of links per environment
+            links_per_env = self.model.link_count // self.num_envs
+            
+            for body_idx in self.com_randomization_bodies:
+                # Calculate the actual link indices for the specified environments
+                link_indices = [body_idx + i * links_per_env for i in env_ids]
+                
+                for link_idx in link_indices:
+                    if link_idx < self.model.link_count:
+                        # COM information is stored in joint_X_cm (joint mass frame in child frame)
+                        # This describes where the center of mass is relative to the joint frame
+                        if hasattr(self.model, 'joint_X_cm') and self.model.joint_X_cm is not None:
+                            # Get current COM from joint_X_cm (center of mass in joint frame)
+                            # joint_X_cm has shape [joint_count, 7] where 7 = [x, y, z, qx, qy, qz, qw]
+                            current_com = self.model.joint_X_cm[link_idx, :3]  # First 3 elements are x, y, z
+                            
+                            # Generate uniform noise for x, y, z COM components
+                            com_noise = torch.empty(3, device=self.device).uniform_(
+                                self.com_randomization_noise[0], 
+                                self.com_randomization_noise[1]
+                            )
+                            
+                            # Apply noise to COM
+                            new_com = current_com + com_noise
+                            
+                            # Update the COM in the model
+                            self.model.joint_X_cm[link_idx, :3] = new_com
+
+                            # Note: When COM changes, we should also update the inertia tensor
+                            # This is a simplified approach - in practice, you might need to recompute
+                            # the inertia tensor using Steiner's theorem or similar methods
+                        else:
+                            print(f"Warning: joint_X_cm not available for link {link_idx}")
+                            print(f"Available attributes: {[attr for attr in dir(self.model) if 'cm' in attr or 'com' in attr]}")
+                        
+                    else:
+                        print(f"Warning: Link index {link_idx} out of range (max: {self.model.link_count})")
+        except Exception as e:
+            print(f"Error in COM randomization: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def enable_mass_randomization(self, bodies=None, noise_range=None):
+        """Enable mass randomization with optional custom parameters"""
+        self.mass_randomization = True
+        if bodies is not None:
+            self.mass_randomization_bodies = bodies
+        if noise_range is not None:
+            self.mass_randomization_noise = noise_range
+        print(f"Mass randomization enabled: bodies={self.mass_randomization_bodies}, "
+              f"noise_range={self.mass_randomization_noise}")
+
+    def disable_mass_randomization(self):
+        """Disable mass randomization"""
+        self.mass_randomization = False
+        print("Mass randomization disabled")
+
+    def enable_com_randomization(self, bodies=None, noise_range=None):
+        """Enable COM randomization with optional custom parameters"""
+        self.com_randomization = True
+        if bodies is not None:
+            self.com_randomization_bodies = bodies
+        if noise_range is not None:
+            self.com_randomization_noise = noise_range
+        print(f"COM randomization enabled: bodies={self.com_randomization_bodies}, "
+              f"noise_range={self.com_randomization_noise}")
+
+    def disable_com_randomization(self):
+        """Disable COM randomization"""
+        self.com_randomization = False
+        print("COM randomization disabled")
+
+    def inspect_model_structure(self):
+        """Inspect the model structure to understand available attributes"""
+        print(f"\n=== Model Structure Inspection ===")
+        print(f"Model type: {type(self.model)}")
+        print(f"Link count: {self.model.link_count}")
+        print(f"Available attributes:")
+        
+        # Check key attributes
+        key_attrs = [
+            'body_X_cm', 'body_I_m', 'joint_X_cm', 'shape_transform', 'shape_body',
+            'joint_q', 'joint_qd', 'particle_q', 'particle_mass'
+        ]
+        
+        for attr in key_attrs:
+            if hasattr(self.model, attr):
+                value = getattr(self.model, attr)
+                if value is not None:
+                    if torch.is_tensor(value):
+                        print(f"  {attr}: {type(value)}, shape: {value.shape}, dtype: {value.dtype}")
+                    else:
+                        print(f"  {attr}: {type(value)}, value: {value}")
+                else:
+                    print(f"  {attr}: {type(value)}, value: None")
+            else:
+                print(f"  {attr}: Not available")
+        
+        # Check if body_X_cm exists and show its structure
+        if hasattr(self.model, 'body_X_cm') and self.model.body_X_cm is not None:
+            print(f"\nbody_X_cm details:")
+            print(f"  Shape: {self.model.body_X_cm.shape}")
+            print(f"  First few values:")
+            for i in range(min(3, self.model.link_count)):
+                com = self.model.body_X_cm[i, :3].tolist()
+                print(f"    Link {i}: {com}")
+        else:
+            print(f"\nbody_X_cm: Not available or None")
+        
+        # Check if joint_X_cm exists and show its structure
+        if hasattr(self.model, 'joint_X_cm') and self.model.joint_X_cm is not None:
+            print(f"\njoint_X_cm details:")
+            print(f"  Shape: {self.model.joint_X_cm.shape}")
+            print(f"  First few values:")
+            for i in range(min(3, self.model.link_count)):
+                com = self.model.joint_X_cm[i, :3].tolist()
+                print(f"    Link {i}: {com}")
+        else:
+            print(f"\njoint_X_cm: Not available or None")
+        
+        print("=" * 50)
 
     def reset_episode_stats(self, env_ids):
         """Reset episode statistics for specified environments"""
@@ -1010,19 +1231,44 @@ class Go2VelocityEnv(DFlexEnv):
         # Create a copy to avoid modifying the original
         noisy_obs = obs.clone()
         
-        # Apply noise to velocity observations (indices 0:6 for lin_vel_b and ang_vel_b)
-        if self.vel_obs_noise_std > 0:
-            vel_noise = torch.randn_like(obs[:, :6]) * self.vel_obs_noise_std
-            noisy_obs[:, :6] += vel_noise
+        # Apply noise to base linear velocity observations (indices 0:3)
+        if self.base_lin_vel_obs_noise[1] > self.base_lin_vel_obs_noise[0]:
+            lin_vel_noise = torch.empty_like(obs[:, :3]).uniform_(
+                self.base_lin_vel_obs_noise[0], 
+                self.base_lin_vel_obs_noise[1]
+            )
+            noisy_obs[:, :3] += lin_vel_noise
+        
+        # Apply noise to base angular velocity observations (indices 3:6)
+        if self.base_ang_vel_obs_noise[1] > self.base_ang_vel_obs_noise[0]:
+            ang_vel_noise = torch.empty_like(obs[:, 3:6]).uniform_(
+                self.base_ang_vel_obs_noise[0], 
+                self.base_ang_vel_obs_noise[1]
+            )
+            noisy_obs[:, 3:6] += ang_vel_noise
+        
+        # Apply noise to projected gravity observations (indices 6:9)
+        if self.projected_gravity_obs_noise[1] > self.projected_gravity_obs_noise[0]:
+            proj_gravity_noise = torch.empty_like(obs[:, 6:9]).uniform_(
+                self.projected_gravity_obs_noise[0], 
+                self.projected_gravity_obs_noise[1]
+            )
+            noisy_obs[:, 6:9] += proj_gravity_noise
         
         # Apply noise to joint position observations (indices 12:24)
-        if self.joint_pos_obs_noise_std > 0:
-            joint_pos_noise = torch.randn_like(obs[:, 12:24]) * self.joint_pos_obs_noise_std
+        if self.joint_pos_obs_noise[1] > self.joint_pos_obs_noise[0]:
+            joint_pos_noise = torch.empty_like(obs[:, 12:24]).uniform_(
+                self.joint_pos_obs_noise[0], 
+                self.joint_pos_obs_noise[1]
+            )
             noisy_obs[:, 12:24] += joint_pos_noise
         
         # Apply noise to joint velocity observations (indices 24:36)
-        if self.joint_vel_obs_noise_std > 0:
-            joint_vel_noise = torch.randn_like(obs[:, 24:36]) * self.joint_vel_obs_noise_std
+        if self.joint_vel_obs_noise[1] > self.joint_vel_obs_noise[0]:
+            joint_vel_noise = torch.empty_like(obs[:, 24:36]).uniform_(
+                self.joint_vel_obs_noise[0], 
+                self.joint_vel_obs_noise[1]
+            )
             noisy_obs[:, 24:36] += joint_vel_noise
         
         return noisy_obs

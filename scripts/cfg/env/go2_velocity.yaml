@@ -19,9 +19,21 @@ config:
 
   # Observation noise configuration
   observation_noise: False  # Enable/disable observation noise
-  vel_obs_noise_std: 0.005   # Standard deviation of velocity observation noise (default: 0.01)
-  joint_pos_obs_noise_std: 0.005  # Standard deviation of joint position observation noise (default: 0.01)
-  joint_vel_obs_noise_std: 0.005  # Standard deviation of joint velocity observation noise (default: 0.01)
+  base_lin_vel_obs_noise: [-0.1, 0.1]  # Range of noise for base linear velocity observation
+  base_ang_vel_obs_noise: [-0.2, 0.2]  # Range of noise for base angular velocity observation
+  projected_gravity_obs_noise: [-0.05, 0.05]  # Range of noise for projected gravity observation
+  joint_pos_obs_noise: [-0.01, 0.01]  # Range of noise for joint position observation
+  joint_vel_obs_noise: [-1.5, 1.5]  # Range of noise for joint velocity observation
+
+  # Mass randomization
+  mass_randomization: False  # Enable/disable mass randomization
+  mass_randomization_bodies: [0]
+  mass_randomization_noise: [-0.5, 0.5]  # Range of noise for mass randomization
+
+  # COM randomization
+  com_randomization: False  # Enable/disable COM randomization
+  com_randomization_bodies: [0]
+  com_randomization_noise: [-0.05, 0.05]  # Range of noise for COM randomization
 
   contact:
     ke: 1e4  # Nominal stiffness for elastic contact
