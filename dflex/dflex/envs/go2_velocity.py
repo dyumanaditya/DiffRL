@@ -391,8 +391,8 @@ class Go2VelocityEnv(DFlexEnv):
         # 18 values per environment: 6 for free body + 12 for joints
         self.torque_limits = [
             # Free body (6 values: 3 angular + 3 linear)
-            -1.0e4, -1.0e4, -1.0e4,  # Angular torque limits (x, y, z)
-            -1.0e4, -1.0e4, -1.0e4,  # Linear force limits (x, y, z)
+            -100.0, -100.0, -100.0,  # Angular torque limits (x, y, z) - more reasonable values
+            -100.0, -100.0, -100.0,  # Linear force limits (x, y, z) - more reasonable values
             
             # Joint torque limits (12 values for the 12 joints)
             -30.0, -30.0, -30.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
@@ -402,7 +402,12 @@ class Go2VelocityEnv(DFlexEnv):
         ]
         
         # Apply torque limits to all environments
-        # Reshape to (num_envs, 18) and flatten to match model tensor shape
+        # The model expects torque limits for ALL joints (including free body)
+        # Total joints per env: 1 (free body) + 12 (actuated joints) = 13 joints
+        # But free body has 6 DOFs, so total DOFs per env: 6 + 12 = 18
+        
+        # Create the full torque limit tensor for all environments
+        # Shape: (num_envs * 18) flattened
         torque_limits_tensor = torch.tensor(
             self.torque_limits, 
             device=self.device, 
@@ -417,6 +422,8 @@ class Go2VelocityEnv(DFlexEnv):
         print(f"  Free body limits: {self.torque_limits[:6]}")
         print(f"  Joint limits: {self.torque_limits[6:]}")
         print(f"  Total limits per env: {len(self.torque_limits)}")
+        print(f"  Model tensor shape: {self.model.joint_torque_limit_lower.shape}")
+        print(f"  Expected shape: ({self.num_envs * 18},)")
 
     def step(self, actions, play=False):
         obs, rew, done, extras = super().step(actions, play)

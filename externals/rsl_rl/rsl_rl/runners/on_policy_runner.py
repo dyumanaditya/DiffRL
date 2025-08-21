@@ -155,8 +155,8 @@ class OnPolicyRunner:
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
             ep_infos.clear()
-            if it == start_iter:
-                store_code_state(self.log_dir, self.git_status_repos)
+            # if it == start_iter:
+            #     store_code_state(self.log_dir, self.git_status_repos)
 
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
 
