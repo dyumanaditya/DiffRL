@@ -325,6 +325,8 @@ class Go2VelocityEnv(DFlexEnv):
         else:
             self.env_dist = 0.0  # set to zero for training for numerical consistency
 
+        self.env_dist = 0.0  # set to zero for training for numerical consistency
+
         start_height = 0.35
 
         asset_folder = os.path.join(os.path.dirname(__file__), "assets")
@@ -391,41 +393,41 @@ class Go2VelocityEnv(DFlexEnv):
         # 18 values per environment: 6 for free body + 12 for joints
         self.torque_limits = [
             # Free body (6 values: 3 angular + 3 linear)
-            -100.0, -100.0, -100.0,  # Angular torque limits (x, y, z) - more reasonable values
-            -100.0, -100.0, -100.0,  # Linear force limits (x, y, z) - more reasonable values
-            
+            -50.0, -50.0, -50.0,  # Angular torque limits (x, y, z) - more reasonable values
+            -50.0, -50.0, -50.0,  # Linear force limits (x, y, z) - more reasonable values
+
             # Joint torque limits (12 values for the 12 joints)
-            -30.0, -30.0, -30.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
-            -30.0, -30.0, -30.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
-            -30.0, -30.0, -30.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
-            -30.0, -30.0, -30.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+            -20.0, -20.0, -20.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
+            -20.0, -20.0, -20.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+            -20.0, -20.0, -20.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+            -20.0, -20.0, -20.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
         ]
-        
+
         # Apply torque limits to all environments
         # The model expects torque limits for ALL joints (including free body)
         # Total joints per env: 1 (free body) + 12 (actuated joints) = 13 joints
         # But free body has 6 DOFs, so total DOFs per env: 6 + 12 = 18
-        
+
         # Create the full torque limit tensor for all environments
         # Shape: (num_envs * 18) flattened
         # Each environment gets its own set of 18 torque limits
         torque_limits_tensor = torch.tensor(
-            self.torque_limits, 
-            device=self.device, 
+            self.torque_limits,
+            device=self.device,
             dtype=torch.float32
         ).repeat(self.num_envs, 1).flatten()
-        
+
         # Set the torque limits in the model
         self.model.joint_torque_limit_lower = torque_limits_tensor
         self.model.joint_torque_limit_upper = -torque_limits_tensor  # Upper limits are negative of lower limits
-        
+
         print(f"Applied torque limits to {self.num_envs} environments:")
         print(f"  Free body limits: {self.torque_limits[:6]}")
         print(f"  Joint limits: {self.torque_limits[6:]}")
         print(f"  Total limits per env: {len(self.torque_limits)}")
         print(f"  Model tensor shape: {self.model.joint_torque_limit_lower.shape}")
         print(f"  Expected shape: ({self.num_envs * 18},)")
-        
+
         # Debug: Print the first few torque limits to verify they're set correctly
         print(f"  First 18 torque limits (env 0): {self.model.joint_torque_limit_lower[:18]}")
         print(f"  Last 18 torque limits (env {self.num_envs-1}): {self.model.joint_torque_limit_lower[-18:]}")
@@ -485,9 +487,11 @@ class Go2VelocityEnv(DFlexEnv):
         return obs, rew, done, extras
 
     def unscale_act(self, action):
+        action = torch.clamp(action, -1, 1)
         return action * self.action_scale
 
     def set_act(self, action):
+        # action = torch.clamp(action, -100, 100)
         self._actions = action.clone() / self.action_scale  # Because we scaled already earlier
         # Convert action to target joint positions
         target_joint_positions = action + self.default_joint_pos
@@ -723,7 +727,60 @@ class Go2VelocityEnv(DFlexEnv):
         
         # Apply observation noise if enabled
         obs = self._apply_observation_noise(obs)
-        
+
+        # ---- Sanity check: NaNs / Infs / Huge values in observations ----
+        # Threshold for "huge" values; tweak as needed
+        huge_thr = getattr(self, "obs_alert_threshold", 50)
+        max_print = 50  # cap how many lines we print
+
+        # Map columns -> human-readable field names (update if you change obs layout)
+        _obs_segments = [
+            ("lin_vel_b", 0, 3, ("x", "y", "z")),
+            ("ang_vel_b", 3, 6, ("x", "y", "z")),
+            ("projected_gravity_b", 6, 9, ("x", "y", "z")),
+            ("commands", 9, 12, ("vx", "vy", "yaw")),
+            ("joint_pos_delta", 12, 24, None),
+            ("joint_vel", 24, 36, None),
+            ("actions", 36, 48, None),
+            # If you add torso height back in, also add: ("torso_height", 48, 49, None),
+        ]
+
+        def _col_name(j: int) -> str:
+            for name, s, e, axes in _obs_segments:
+                if s <= j < e:
+                    k = j - s
+                    suffix = f"[{axes[k]}]" if axes and k < len(axes) else f"[{k}]"
+                    return f"{name}{suffix}"
+            return f"col_{j}"
+
+        bad_mask = torch.isnan(obs) | torch.isinf(obs) | (obs.abs() > huge_thr)
+        num_bad = int(bad_mask.sum().item())
+
+        if num_bad:
+            nan_count = int(torch.isnan(obs).sum().item())
+            inf_count = int(torch.isinf(obs).sum().item())
+            big_count = int((obs.abs() > huge_thr).sum().item())
+            env_idx, col_idx = bad_mask.nonzero(as_tuple=True)
+
+            print(f"[OBS CHECK] Found {num_bad} bad entries "
+                  f"(NaN: {nan_count}, Inf: {inf_count}, >{huge_thr}: {big_count}). "
+                  f"Showing up to {max_print}:")
+
+            to_show = min(num_bad, max_print)
+            for i in range(to_show):
+                e = int(env_idx[i])
+                j = int(col_idx[i])
+                v = obs[e, j].item()  # safe on CPU/GPU
+                print(f"  - env={e:04d}, obs_col={j:03d} ({_col_name(j)}), value={v}")
+
+            # Optional: show the worst offending envs
+            per_env_bad = bad_mask.sum(dim=1)
+            worst_count, worst_envs = torch.topk(per_env_bad, k=min(5, self.num_envs))
+            print("[OBS CHECK] Worst envs by bad count:")
+            for rank in range(worst_envs.numel()):
+                print(f"  #{rank + 1}: env={int(worst_envs[rank])} -> {int(worst_count[rank].item())} issues")
+        # -----------------------------------------------------------------
+
         # Log observation and action statistics to wandb if enabled
         if self.wandb_enabled:
             try:
@@ -930,7 +987,7 @@ class Go2VelocityEnv(DFlexEnv):
             "dof_torques_l2": joint_torques * self.joint_torque_reward_scale * self.sim_dt,
             "dof_acc_l2": joint_accel * self.joint_accel_reward_scale * self.sim_dt,
             "action_rate_l2": action_rate * self.action_rate_reward_scale * self.sim_dt,
-            "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
+            # "feet_air_time": air_time * self.feet_air_time_reward_scale * self.sim_dt,
             "undesired_contacts": contacts * self.undesired_contact_reward_scale * self.sim_dt,
             "flat_orientation_l2": flat_orientation * self.flat_orientation_reward_scale * self.sim_dt,
         }

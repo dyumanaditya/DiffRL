@@ -28,7 +28,7 @@ config:
   # Mass randomization
   mass_randomization: False  # Enable/disable mass randomization
   mass_randomization_bodies: [0]
-  mass_randomization_noise: [-0.5, 0.5]  # Range of noise for mass randomization
+  mass_randomization_noise: [-0.3, 0.3]  # Range of noise for mass randomization
 
   # COM randomization
   com_randomization: False  # Enable/disable COM randomization
@@ -36,27 +36,27 @@ config:
   com_randomization_noise: [-0.05, 0.05]  # Range of noise for COM randomization
 
   contact:
-    ke: 1e3  # Nominal stiffness for elastic contact
-    kd: 8e2  # Nominal damping for elastic contact
+    ke: 5e3  # Nominal stiffness for elastic contact
+    kd: 5e2  # Nominal damping for elastic contact
     kf: 5e2  # Nominal friction for elastic contact
     mu: 0.8  # Nominal friction coefficient for elastic contact
 
   # Domain randomization
   dr: False
   domain_randomization:
-    bodies: [ -1 ]  # Randomize the foot and the ground (foot is body 5 in dflex)
+    bodies: [ -1 ]  # Randomize thr ground
     # Nominal ke=2e4
     # ke_range: [1e3, 1e5]
-    ke_range: [ 5e5, 5.2e5 ]
+    ke_range: [ 5.0e3, 5.5e3 ]
     # Nominal kd=2e3
     # kd_range: [1e2, 1e4]
-    kd_range: [ 5e4, 5.2e4 ]
+    kd_range: [ 5.0e2, 5.5e2 ]
     # Nominal kf=1e3
     # kf_range: [1e2, 1e4]
-    kf_range: [ 1e3, 1.2e3 ]
+    kf_range: [ 5.0e2, 5.4e2 ]
     # Nominal mu=0.9
     # mu_range: [0.5, 1.0]
-    mu_range: [ 0.7, 1.0 ]
+    mu_range: [ 0.6, 0.8 ]
 
 mujoco:
   config:
@@ -93,9 +93,9 @@ ppo:
 #    units: [128, 128, 128]
     units: [512, 256, 128]
 #  scale_value: 0.6
-  kl_threshold: 0.01
-  critic_coef: 2.0
-  bounds_loss_coef: 0.0
+#  kl_threshold: 0.01
+#  critic_coef: 2.0
+#  bounds_loss_coef: 0.0
 
 sac:
   max_epochs: 5000
