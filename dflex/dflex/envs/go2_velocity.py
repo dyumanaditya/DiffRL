@@ -393,14 +393,14 @@ class Go2VelocityEnv(DFlexEnv):
         # 18 values per environment: 6 for free body + 12 for joints
         self.torque_limits = [
             # Free body (6 values: 3 angular + 3 linear)
-            -50.0, -50.0, -50.0,  # Angular torque limits (x, y, z) - more reasonable values
-            -50.0, -50.0, -50.0,  # Linear force limits (x, y, z) - more reasonable values
+            -10000.0, -10000.0, -10000.0,  # Angular torque limits (x, y, z) - more reasonable values
+            -10000.0, -10000.0, -10000.0,  # Linear force limits (x, y, z) - more reasonable values
 
             # Joint torque limits (12 values for the 12 joints)
-            -20.0, -20.0, -20.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
-            -20.0, -20.0, -20.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
-            -20.0, -20.0, -20.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
-            -20.0, -20.0, -20.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+            -2000.0, -2000.0, -2000.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
+            -2000.0, -2000.0, -2000.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+            -2000.0, -2000.0, -2000.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+            -2000.0, -2000.0, -2000.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
         ]
 
         # Apply torque limits to all environments
@@ -487,7 +487,7 @@ class Go2VelocityEnv(DFlexEnv):
         return obs, rew, done, extras
 
     def unscale_act(self, action):
-        action = torch.clamp(action, -1, 1)
+        action = torch.clamp(action, -10, 10)
         return action * self.action_scale
 
     def set_act(self, action):

@@ -37,7 +37,7 @@ config:
 
   contact:
     ke: 5e3  # Nominal stiffness for elastic contact
-    kd: 5e2  # Nominal damping for elastic contact
+    kd: 8e2  # Nominal damping for elastic contact
     kf: 5e2  # Nominal friction for elastic contact
     mu: 0.8  # Nominal friction coefficient for elastic contact
 
