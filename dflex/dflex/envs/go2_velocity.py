@@ -397,10 +397,10 @@ class Go2VelocityEnv(DFlexEnv):
             -10000.0, -10000.0, -10000.0,  # Linear force limits (x, y, z) - more reasonable values
 
             # Joint torque limits (12 values for the 12 joints)
-            -2000.0, -2000.0, -2000.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
-            -2000.0, -2000.0, -2000.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
-            -2000.0, -2000.0, -2000.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
-            -2000.0, -2000.0, -2000.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
+            -20.0, -20.0, -20.0,  # RR_hip_joint, RR_thigh_joint, RR_calf_joint
+            -20.0, -20.0, -20.0,  # RL_hip_joint, RL_thigh_joint, RL_calf_joint
+            -20.0, -20.0, -20.0,  # FR_hip_joint, FR_thigh_joint, FR_calf_joint
+            -20.0, -20.0, -20.0,  # FL_hip_joint, FL_thigh_joint, FL_calf_joint
         ]
 
         # Apply torque limits to all environments
@@ -730,7 +730,7 @@ class Go2VelocityEnv(DFlexEnv):
 
         # ---- Sanity check: NaNs / Infs / Huge values in observations ----
         # Threshold for "huge" values; tweak as needed
-        huge_thr = getattr(self, "obs_alert_threshold", 50)
+        huge_thr = getattr(self, "obs_alert_threshold", 20)
         max_print = 50  # cap how many lines we print
 
         # Map columns -> human-readable field names (update if you change obs layout)
@@ -772,6 +772,10 @@ class Go2VelocityEnv(DFlexEnv):
                 j = int(col_idx[i])
                 v = obs[e, j].item()  # safe on CPU/GPU
                 print(f"  - env={e:04d}, obs_col={j:03d} ({_col_name(j)}), value={v}")
+                if _col_name(j) == "lin_vel_b[z]" or _col_name(j) == "lin_vel_b[x]":
+                    print("Before transform:", lin_vel[e, :])
+                if _col_name(j) == "ang_vel_b[x]" or _col_name(j) == "ang_vel_b[y]" or _col_name(j) == "ang_vel_b[z]":
+                    print("Before transform:", ang_vel[e, :])
 
             # Optional: show the worst offending envs
             per_env_bad = bad_mask.sum(dim=1)
