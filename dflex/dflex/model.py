@@ -364,6 +364,12 @@ class Model:
         self.joint_target_ke = None
         self.joint_target_kd = None
         self.joint_target = None
+        self.joint_limit_lower = None
+        self.joint_limit_upper = None
+        self.joint_limit_ke = None
+        self.joint_limit_kd = None
+        self.joint_torque_limit_lower = None
+        self.joint_torque_limit_upper = None
 
         self.particle_count = 0
         self.joint_coord_count = 0
@@ -1562,6 +1568,8 @@ class ModelBuilder:
         self.joint_limit_upper = []
         self.joint_limit_ke = []
         self.joint_limit_kd = []
+        self.joint_torque_limit_lower = []
+        self.joint_torque_limit_upper = []
 
         self.joint_q = []  # generalized coordinates       (input)
         self.joint_qd = []  # generalized velocities        (input)
@@ -1599,6 +1607,8 @@ class ModelBuilder:
         limit_upper: float = 1.0e3,
         limit_ke: float = 100.0,
         limit_kd: float = 10.0,
+        torque_limit_lower: float = -1.0e4,
+        torque_limit_upper: float = 1.0e4,
         com: Vec3 = np.zeros(3),
         I_m: Mat33 = np.zeros((3, 3)),
         m: float = 0.0,
@@ -1646,6 +1656,8 @@ class ModelBuilder:
             self.joint_armature.append(armature)
             self.joint_limit_lower.append(limit_lower)
             self.joint_limit_upper.append(limit_upper)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
 
         elif type == JOINT_REVOLUTE:
             self.joint_q.append(0.0)
@@ -1654,6 +1666,8 @@ class ModelBuilder:
             self.joint_armature.append(armature)
             self.joint_limit_lower.append(limit_lower)
             self.joint_limit_upper.append(limit_upper)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
 
         elif type == JOINT_BALL:
             # quaternion
@@ -1686,6 +1700,14 @@ class ModelBuilder:
             self.joint_limit_upper.append(limit_upper)
             self.joint_limit_upper.append(limit_upper)
             self.joint_limit_upper.append(0.0)
+
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
 
         elif type == JOINT_FIXED:
             pass
@@ -1732,6 +1754,20 @@ class ModelBuilder:
             self.joint_limit_upper.append(0.0)
             self.joint_limit_upper.append(0.0)
             self.joint_limit_upper.append(0.0)
+
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+            self.joint_torque_limit_lower.append(torque_limit_lower)
+
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
+            self.joint_torque_limit_upper.append(torque_limit_upper)
 
             # joint velocities
             for i in range(6):
@@ -2998,6 +3034,13 @@ class ModelBuilder:
         )
         m.joint_limit_kd = torch.tensor(
             self.joint_limit_kd, dtype=torch.float32, device=adapter
+        )
+
+        m.joint_torque_limit_lower = torch.tensor(
+            self.joint_torque_limit_lower, dtype=torch.float32, device=adapter
+        )
+        m.joint_torque_limit_upper = torch.tensor(
+            self.joint_torque_limit_upper, dtype=torch.float32, device=adapter
         )
 
         # counts

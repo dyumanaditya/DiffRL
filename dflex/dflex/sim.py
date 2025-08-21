@@ -1506,6 +1506,8 @@ def jcalc_tau(
     joint_target: df.tensor(float),
     joint_limit_lower: df.tensor(float),
     joint_limit_upper: df.tensor(float),
+    joint_torque_limit_lower: df.tensor(float),
+    joint_torque_limit_upper: df.tensor(float),
     coord_start: int,
     dof_start: int,
     body_f_s: spatial_vector,
@@ -1545,6 +1547,11 @@ def jcalc_tau(
             + damping_f
         )
 
+        # clamp torque to limits
+        torque_lower = df.load(joint_torque_limit_lower, coord_start)
+        torque_upper = df.load(joint_torque_limit_upper, coord_start)
+        t = df.clamp(t, torque_lower, torque_upper)
+
         df.store(tau, dof_start, t)
 
     # ball
@@ -1570,11 +1577,14 @@ def jcalc_tau(
             w = w_j[i]
             r = r_j[i]
 
-            df.store(
-                tau,
-                dof_start + i,
-                0.0 - spatial_dot(S_s, body_f_s) - w * target_k_d - r * target_k_e,
-            )
+            t = 0.0 - spatial_dot(S_s, body_f_s) - w * target_k_d - r * target_k_e
+
+            # clamp torque to limits
+            torque_lower = df.load(joint_torque_limit_lower, coord_start + i)
+            torque_upper = df.load(joint_torque_limit_upper, coord_start + i)
+            t = df.clamp(t, torque_lower, torque_upper)
+
+            df.store(tau, dof_start + i, t)
 
     # fixed
     # if (type == 3)
@@ -1584,7 +1594,14 @@ def jcalc_tau(
     if type == 4:
         for i in range(0, 6):
             S_s = df.load(joint_S_s, dof_start + i)
-            df.store(tau, dof_start + i, 0.0 - spatial_dot(S_s, body_f_s))
+            t = 0.0 - spatial_dot(S_s, body_f_s)
+
+            # clamp torque to limits
+            torque_lower = df.load(joint_torque_limit_lower, coord_start + i)
+            torque_upper = df.load(joint_torque_limit_upper, coord_start + i)
+            t = df.clamp(t, torque_lower, torque_upper)
+
+            df.store(tau, dof_start + i, t)
 
     return 0
 
@@ -1918,6 +1935,8 @@ def compute_link_tau(
     joint_limit_upper: df.tensor(float),
     joint_limit_ke: df.tensor(float),
     joint_limit_kd: df.tensor(float),
+    joint_torque_limit_lower: df.tensor(float),
+    joint_torque_limit_upper: df.tensor(float),
     joint_S_s: df.tensor(df.spatial_vector),
     body_fb_s: df.tensor(df.spatial_vector),
     # outputs
@@ -1958,6 +1977,8 @@ def compute_link_tau(
         joint_target,
         joint_limit_lower,
         joint_limit_upper,
+        joint_torque_limit_lower,
+        joint_torque_limit_upper,
         coord_start,
         dof_start,
         f_s,
@@ -2041,6 +2062,8 @@ def eval_rigid_tau(
     joint_limit_upper: df.tensor(float),
     joint_limit_ke: df.tensor(float),
     joint_limit_kd: df.tensor(float),
+    joint_torque_limit_lower: df.tensor(float),
+    joint_torque_limit_upper: df.tensor(float),
     joint_axis: df.tensor(df.float3),
     joint_S_s: df.tensor(df.spatial_vector),
     body_fb_s: df.tensor(df.spatial_vector),
@@ -2074,6 +2097,8 @@ def eval_rigid_tau(
             joint_limit_upper,
             joint_limit_ke,
             joint_limit_kd,
+            joint_torque_limit_lower,
+            joint_torque_limit_upper,
             joint_S_s,
             body_fb_s,
             body_ft_s,
@@ -3156,6 +3181,8 @@ class SemiImplicitIntegrator:
                         model.joint_limit_upper,
                         model.joint_limit_ke,
                         model.joint_limit_kd,
+                        model.joint_torque_limit_lower,
+                        model.joint_torque_limit_upper,
                         model.joint_axis,
                         state_out.joint_S_s,
                         state_out.body_f_s,
