@@ -378,6 +378,8 @@ class Go2VelocityEnv(DFlexEnv):
         self.model.contact_kf = self.contact_kf
         self.model.contact_mu = self.contact_mu
 
+        self._set_domain_randomization()
+
         self.integrator = df.sim.SemiImplicitIntegrator()
 
         self.state = self.model.state()

@@ -475,6 +475,7 @@ class DFlexEnv:
 
             # Randomize contact parameters for the reset environments if domain randomization is enabled
             if self.dr_params is not None:
+                print("randomizing")
                 self.model.randomize_contact_params(env_ids)
 
             self.obs_buf = self.observation_from_state(self.state)
