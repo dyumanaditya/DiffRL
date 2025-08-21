@@ -1430,10 +1430,12 @@ class Model:
             param = torch.stack([ke, kd, kf, mu], dim=-1)[:, None, :]
 
             if dr_target_shape is None:
+                print("should not be here")
                 # update only the selected environments
                 for i, env_idx in enumerate(keep_envs):
                     mat[env_idx] = param[i].expand(shapes_per_env, -1)
             else:
+                print("should not be here")
                 # build mask of shapes whose *local* body‑id is in target_bodies
                 for i, env_idx in enumerate(keep_envs):
                     local_body_ids = (self.shape_body[env_idx * shapes_per_env:(env_idx + 1) * shapes_per_env]
@@ -1449,6 +1451,7 @@ class Model:
             self.contact_kd = ground_kd
             self.contact_kf = ground_kf
             self.contact_mu = ground_mu
+            print("should not  here only")
 
         # print("ground contact")
         # print(self.contact_ke)
