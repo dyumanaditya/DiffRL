@@ -216,17 +216,17 @@ class Go2VelocityEnv(DFlexEnv):
                     "termination_height": self.termination_height,
                     "action_scale": self.action_scale,
                     "observation_noise": self.observation_noise,
-                    "base_lin_vel_obs_noise": self.base_lin_vel_obs_noise,
-                    "base_ang_vel_obs_noise": self.base_ang_vel_obs_noise,
-                    "projected_gravity_obs_noise": self.projected_gravity_obs_noise,
-                    "joint_pos_obs_noise": self.joint_pos_obs_noise,
-                    "joint_vel_obs_noise": self.joint_vel_obs_noise,
+                    "base_lin_vel_obs_noise": list(self.base_lin_vel_obs_noise),
+                    "base_ang_vel_obs_noise": list(self.base_ang_vel_obs_noise),
+                    "projected_gravity_obs_noise": list(self.projected_gravity_obs_noise),
+                    "joint_pos_obs_noise": list(self.joint_pos_obs_noise),
+                    "joint_vel_obs_noise": list(self.joint_vel_obs_noise),
                     "mass_randomization": self.mass_randomization,
-                    "mass_randomization_bodies": self.mass_randomization_bodies,
-                    "mass_randomization_noise": self.mass_randomization_noise,
+                    "mass_randomization_bodies": list(self.mass_randomization_bodies),
+                    "mass_randomization_noise": list(self.mass_randomization_noise),
                     "com_randomization": self.com_randomization,
-                    "com_randomization_bodies": self.com_randomization_bodies,
-                    "com_randomization_noise": self.com_randomization_noise,
+                    "com_randomization_bodies": list(self.com_randomization_bodies),
+                    "com_randomization_noise": list(self.com_randomization_noise),
                 }
             )
             print("Wandb initialized successfully for Go2 velocity environment")
@@ -666,11 +666,11 @@ class Go2VelocityEnv(DFlexEnv):
                 # Add noise statistics if observation noise is enabled
                 if self.observation_noise:
                     obs_stats.update({
-                        "noise/base_lin_vel_range": self.base_lin_vel_obs_noise,
-                        "noise/base_ang_vel_range": self.base_ang_vel_obs_noise,
-                        "noise/projected_gravity_range": self.projected_gravity_obs_noise,
-                        "noise/joint_pos_range": self.joint_pos_obs_noise,
-                        "noise/joint_vel_range": self.joint_vel_obs_noise,
+                        "noise/base_lin_vel_range": list(self.base_lin_vel_obs_noise),
+                        "noise/base_ang_vel_range": list(self.base_ang_vel_obs_noise),
+                        "noise/projected_gravity_range": list(self.projected_gravity_obs_noise),
+                        "noise/joint_pos_range": list(self.joint_pos_obs_noise),
+                        "noise/joint_vel_range": list(self.joint_vel_obs_noise),
                         "noise/obs_total_std": obs.std().item(),  # Total std of noisy observations
                     })
                 
@@ -1024,17 +1024,17 @@ class Go2VelocityEnv(DFlexEnv):
         """Get current noise configuration"""
         return {
             "observation_noise": self.observation_noise,
-            "base_lin_vel_obs_noise": self.base_lin_vel_obs_noise,
-            "base_ang_vel_obs_noise": self.base_ang_vel_obs_noise,
-            "projected_gravity_obs_noise": self.projected_gravity_obs_noise,
-            "joint_pos_obs_noise": self.joint_pos_obs_noise,
-            "joint_vel_obs_noise": self.joint_vel_obs_noise,
+            "base_lin_vel_obs_noise": list(self.base_lin_vel_obs_noise),
+            "base_ang_vel_obs_noise": list(self.base_ang_vel_obs_noise),
+            "projected_gravity_obs_noise": list(self.projected_gravity_obs_noise),
+            "joint_pos_obs_noise": list(self.joint_pos_obs_noise),
+            "joint_vel_obs_noise": list(self.joint_vel_obs_noise),
             "mass_randomization": self.mass_randomization,
-            "mass_randomization_bodies": self.mass_randomization_bodies,
-            "mass_randomization_noise": self.mass_randomization_noise,
+            "mass_randomization_bodies": list(self.mass_randomization_bodies),
+            "mass_randomization_noise": list(self.mass_randomization_noise),
             "com_randomization": self.com_randomization,
-            "com_randomization_bodies": self.com_randomization_bodies,
-            "com_randomization_noise": self.com_randomization_noise,
+            "com_randomization_bodies": list(self.com_randomization_bodies),
+            "com_randomization_noise": list(self.com_randomization_noise),
         }
 
     def _apply_mass_randomization(self, env_ids):
