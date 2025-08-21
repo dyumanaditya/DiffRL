@@ -36,8 +36,8 @@ config:
   com_randomization_noise: [-0.05, 0.05]  # Range of noise for COM randomization
 
   contact:
-    ke: 1e4  # Nominal stiffness for elastic contact
-    kd: 8e3  # Nominal damping for elastic contact
+    ke: 1e3  # Nominal stiffness for elastic contact
+    kd: 8e2  # Nominal damping for elastic contact
     kf: 5e2  # Nominal friction for elastic contact
     mu: 0.9  # Nominal friction coefficient for elastic contact
 
