@@ -1512,6 +1512,7 @@ def jcalc_tau(
     dof_start: int,
     body_f_s: spatial_vector,
     tau: df.tensor(float),
+    joint_index: int,  # Add joint index parameter
 ):
     # prismatic / revolute
     if type == 0 or type == 1:
@@ -1548,8 +1549,11 @@ def jcalc_tau(
         )
 
         # clamp torque to limits
-        torque_lower = df.load(joint_torque_limit_lower, coord_start)
-        torque_upper = df.load(joint_torque_limit_upper, coord_start)
+        # For prismatic/revolute joints, we need to access the torque limits for this specific joint
+        # The joint index 'i' is passed from compute_link_tau
+        # For single-DOF joints, we use the joint_index to access the torque limit
+        torque_lower = df.load(joint_torque_limit_lower, joint_index)
+        torque_upper = df.load(joint_torque_limit_upper, joint_index)
         t = df.clamp(t, torque_lower, torque_upper)
 
         df.store(tau, dof_start, t)
@@ -1580,8 +1584,12 @@ def jcalc_tau(
             t = 0.0 - spatial_dot(S_s, body_f_s) - w * target_k_d - r * target_k_e
 
             # clamp torque to limits
-            torque_lower = df.load(joint_torque_limit_lower, coord_start + i)
-            torque_upper = df.load(joint_torque_limit_upper, coord_start + i)
+            # For ball joints, each DOF has its own torque limit
+            # We need to access the torque limit for this specific DOF within the joint
+            # The joint index is passed from compute_link_tau, and we add the DOF offset
+            # For ball joints, the first 3 DOFs correspond to the first 3 torque limits
+            torque_lower = df.load(joint_torque_limit_lower, joint_index + i)
+            torque_upper = df.load(joint_torque_limit_upper, joint_index + i)
             t = df.clamp(t, torque_lower, torque_upper)
 
             df.store(tau, dof_start + i, t)
@@ -1597,8 +1605,10 @@ def jcalc_tau(
             t = 0.0 - spatial_dot(S_s, body_f_s)
 
             # clamp torque to limits
-            torque_lower = df.load(joint_torque_limit_lower, coord_start + i)
-            torque_upper = df.load(joint_torque_limit_upper, coord_start + i)
+            # For free joints, each DOF has its own torque limit
+            # We need to access the torque limit for this specific DOF within the joint
+            torque_lower = df.load(joint_torque_limit_lower, joint_index + i)
+            torque_upper = df.load(joint_torque_limit_upper, joint_index + i)
             t = df.clamp(t, torque_lower, torque_upper)
 
             df.store(tau, dof_start + i, t)
@@ -1814,7 +1824,7 @@ def eval_rigid_fk(
     body_X_sm: df.tensor(df.spatial_transform),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     start = df.load(articulation_start, index)
     end = df.load(articulation_start, index + 1)
@@ -1865,9 +1875,9 @@ def compute_link_velocity(
     # parent transform in spatial coordinates
     X_sp = spatial_transform_identity()
     if parent >= 0:
-        X_sp = load(body_X_sc, parent)
+        X_sp = df.load(body_X_sc, parent)
 
-    X_pj = load(joint_X_pj, i)
+    X_pj = df.load(joint_X_pj, i)
     X_sj = spatial_transform_multiply(X_sp, X_pj)
 
     # compute motion subspace and velocity across the joint (also stores S_s to global memory)
@@ -1983,6 +1993,7 @@ def compute_link_tau(
         dof_start,
         f_s,
         tau,
+        i,  # Add joint index parameter
     )
 
     # update parent forces, todo: check that this is valid for the backwards pass
@@ -2017,7 +2028,7 @@ def eval_rigid_id(
     body_a_s: df.tensor(df.spatial_vector),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     start = df.load(articulation_start, index)
     end = df.load(articulation_start, index + 1)
@@ -2072,7 +2083,7 @@ def eval_rigid_tau(
     tau: df.tensor(float),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     start = df.load(articulation_start, index)
     end = df.load(articulation_start, index + 1)
@@ -2117,7 +2128,7 @@ def eval_rigid_jacobian(
     J: df.tensor(float),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     joint_start = df.load(articulation_start, index)
     joint_end = df.load(articulation_start, index + 1)
@@ -2142,7 +2153,7 @@ def eval_rigid_jacobian(
 #     J: df.tensor(float)):
 
 #     # one thread per-articulation
-#     index = tid()
+#     index = df.tid()
 
 #     joint_start = df.load(articulation_start, index)
 #     joint_end = df.load(articulation_start, index+1)
@@ -2165,7 +2176,7 @@ def eval_rigid_mass(
     M: df.tensor(float),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     joint_start = df.load(articulation_start, index)
     joint_end = df.load(articulation_start, index + 1)
@@ -2277,7 +2288,7 @@ def eval_rigid_integrate(
     joint_qd_new: df.tensor(float),
 ):
     # one thread per-articulation
-    index = tid()
+    index = df.tid()
 
     type = df.load(joint_type, index)
     coord_start = df.load(joint_q_start, index)

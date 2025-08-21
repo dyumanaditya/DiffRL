@@ -408,6 +408,7 @@ class Go2VelocityEnv(DFlexEnv):
         
         # Create the full torque limit tensor for all environments
         # Shape: (num_envs * 18) flattened
+        # Each environment gets its own set of 18 torque limits
         torque_limits_tensor = torch.tensor(
             self.torque_limits, 
             device=self.device, 
@@ -424,9 +425,47 @@ class Go2VelocityEnv(DFlexEnv):
         print(f"  Total limits per env: {len(self.torque_limits)}")
         print(f"  Model tensor shape: {self.model.joint_torque_limit_lower.shape}")
         print(f"  Expected shape: ({self.num_envs * 18},)")
+        
+        # Debug: Print the first few torque limits to verify they're set correctly
+        print(f"  First 18 torque limits (env 0): {self.model.joint_torque_limit_lower[:18]}")
+        print(f"  Last 18 torque limits (env {self.num_envs-1}): {self.model.joint_torque_limit_lower[-18:]}")
 
     def step(self, actions, play=False):
+        # Debug: Check for NaNs before simulation
+        if hasattr(self, 'state') and self.state is not None:
+            joint_q_nan = torch.isnan(self.state.joint_q).any()
+            joint_qd_nan = torch.isnan(self.state.joint_qd).any()
+            if joint_q_nan or joint_qd_nan:
+                print(f"WARNING: NaNs detected in state before step:")
+                print(f"  joint_q has NaNs: {joint_q_nan}")
+                print(f"  joint_qd has NaNs: {joint_qd_nan}")
+                if joint_q_nan:
+                    print(f"  joint_q NaN locations: {torch.isnan(self.state.joint_q).nonzero()}")
+                if joint_qd_nan:
+                    print(f"  joint_qd NaN locations: {torch.isnan(self.state.joint_qd).nonzero()}")
+        
         obs, rew, done, extras = super().step(actions, play)
+        
+        # Debug: Check for NaNs after simulation
+        if obs is not None:
+            obs_nan = torch.isnan(obs).any()
+            if obs_nan:
+                print(f"ERROR: NaNs detected in observations after step!")
+                print(f"  obs NaN locations: {torch.isnan(obs).nonzero()}")
+                print(f"  obs shape: {obs.shape}")
+                
+                # Check which observation components have NaNs
+                obs_components = [
+                    "lin_vel_b", "ang_vel_b", "projected_gravity_b", 
+                    "commands", "joint_pos", "joint_vel", "actions"
+                ]
+                for i, name in enumerate(obs_components):
+                    start_idx = i * 12
+                    end_idx = min((i + 1) * 12, obs.shape[1])
+                    if start_idx < obs.shape[1]:
+                        component_nan = torch.isnan(obs[:, start_idx:end_idx]).any()
+                        if component_nan:
+                            print(f"    {name} (indices {start_idx}:{end_idx}) has NaNs")
         
         # Increment step counter for wandb logging
         self._current_step += 1
