@@ -24,8 +24,8 @@ config:
   joint_vel_obs_noise_std: 0.005  # Standard deviation of joint velocity observation noise (default: 0.01)
 
   contact:
-    ke: 1e3  # Nominal stiffness for elastic contact
-    kd: 8e2  # Nominal damping for elastic contact
+    ke: 1e4  # Nominal stiffness for elastic contact
+    kd: 8e3  # Nominal damping for elastic contact
     kf: 5e2  # Nominal friction for elastic contact
     mu: 0.9  # Nominal friction coefficient for elastic contact
 
