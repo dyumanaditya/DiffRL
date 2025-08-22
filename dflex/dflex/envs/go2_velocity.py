@@ -487,7 +487,7 @@ class Go2VelocityEnv(DFlexEnv):
         return obs, rew, done, extras
 
     def unscale_act(self, action):
-        action = torch.clamp(action, -10, 10)
+        action = torch.clamp(action, -50, 50)
         return action * self.action_scale
 
     def set_act(self, action):
@@ -543,9 +543,9 @@ class Go2VelocityEnv(DFlexEnv):
         nonfinite_mask = nonfinite_mask | ~(torch.isfinite(joint_q).sum(-1) > 0)
         nonfinite_mask = nonfinite_mask | ~(torch.isfinite(joint_qd).sum(-1) > 0)
 
-        invalid_value_mask = (torch.abs(joint_q) > 1e6).sum(-1) > 0
+        invalid_value_mask = (torch.abs(joint_q) > 15).sum(-1) > 0
         invalid_value_mask = (
-            invalid_value_mask | (torch.abs(joint_qd) > 1e6).sum(-1) > 0
+            invalid_value_mask | (torch.abs(joint_qd) > 15).sum(-1) > 0
         )
 
         termination = termination | nonfinite_mask | invalid_value_mask
@@ -558,8 +558,8 @@ class Go2VelocityEnv(DFlexEnv):
             try:
                 termination_reasons = {
                     "termination/nonfinite_obs": nonfinite_mask.sum().item(),
-                    "termination/invalid_joint_q": (torch.abs(joint_q) > 1e6).sum().item(),
-                    "termination/invalid_joint_qd": (torch.abs(joint_qd) > 1e6).sum().item(),
+                    "termination/invalid_joint_q": (torch.abs(joint_q) > 15).sum().item(),
+                    "termination/invalid_joint_qd": (torch.abs(joint_qd) > 15).sum().item(),
                     "termination/height": (self.torso_height < self.termination_height).sum().item() if self.early_termination else 0,
                     "termination/total": termination.sum().item()
                 }
