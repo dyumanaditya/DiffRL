@@ -44,7 +44,8 @@ config:
   # Domain randomization
   dr: False
   domain_randomization:
-    bodies: [ -1 ]  # Randomize thr ground
+#    bodies: [ -1 ]  # Randomize thr ground
+    bodies: [ 11, 20, 29, 38 ]  # Randomize the ground and feet
     # Nominal ke=2e4
     # ke_range: [1e3, 1e5]
     ke_range: [ 5.0e3, 5.5e3 ]
